@@ -135,7 +135,7 @@ function mount() {
   const savePreferences = () => {
     try {
       window.localStorage.setItem('dglab-majsoul.rules.v1', JSON.stringify({ version: 1, ...context(), stopShortcut, eventRules: ruleEditor.snapshot() }));
-      ui['rules-save-note'].textContent = '规则仅保存在此浏览器；刷新后仍需手动启用，默认仅模拟。';
+      ui['rules-save-note'].textContent = '规则自动保存在此浏览器。';
     } catch { ui['rules-save-note'].textContent = '浏览器未允许本地保存；本次页面内的编辑仍有效。'; }
   };
   const updateAddChoices = () => {
@@ -222,7 +222,7 @@ function mount() {
     badge('relay', '中继未连接'); ui['relay-message'].textContent = '连接已断开。';
   });
   ui.copy.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(JSON.stringify({ version: '0.8.0', total, events: recent }, null, 2)); ui['copy-label'].textContent = '已复制'; }
+    try { await navigator.clipboard.writeText(JSON.stringify({ version: '0.9.0', total, events: recent }, null, 2)); ui['copy-label'].textContent = '已复制'; }
     catch { ui['copy-label'].textContent = '复制失败，请允许剪贴板访问'; }
   });
   ui.clear.addEventListener('click', () => { recent.length = 0; renderEvents(); });

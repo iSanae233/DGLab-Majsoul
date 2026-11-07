@@ -1,6 +1,7 @@
 import { build } from 'esbuild';
-import { cp, mkdir, rm, readFile } from 'node:fs/promises';
+import { cp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { resolveDashboardOrigin } from './build-config.mjs';
+import { homeMarkup } from '../web/home.mjs';
 const origin = resolveDashboardOrigin(process.env);
 const { version } = JSON.parse(await readFile('package.json', 'utf8'));
 const header = `// ==UserScript==
@@ -21,11 +22,20 @@ const header = `// ==UserScript==
 await rm('dist', { recursive: true, force: true });
 await mkdir('dist/site/userscripts', { recursive: true });
 await mkdir('dist/site/link', { recursive: true });
+await mkdir('dist/site/play', { recursive: true });
 const common = { bundle: true, platform: 'browser', target: ['chrome110', 'firefox115'], legalComments: 'inline', minify: false };
 await build({ ...common, entryPoints: ['src/index.mjs'], format: 'iife', outfile: 'dist/dglab-majsoul.user.js',
   define: { __DASHBOARD_ORIGIN__: JSON.stringify(origin) }, banner: { js: header } });
 await cp('dist/dglab-majsoul.user.js', 'dist/site/userscripts/dglab-majsoul.user.js');
 await build({ ...common, entryPoints: ['web/main.mjs'], format: 'esm', outfile: 'dist/site/app.js' });
-for (const file of ['index.html', 'style.css', '_headers', '_routes.json', 'favicon.svg', 'favicon.ico', 'site.webmanifest', 'assets']) await cp(`web/${file}`, `dist/site/${file}`, { recursive: true });
-await cp('web/index.html', 'dist/site/link/index.html');
+for (const file of ['style.css', '_headers', '_routes.json', 'favicon.svg', 'favicon.ico', 'site.webmanifest', 'assets']) await cp(`web/${file}`, `dist/site/${file}`, { recursive: true });
+const template = await readFile('web/index.html', 'utf8');
+const renderPage = (title, content, entry = '') => template.replace('__PAGE_TITLE__', title)
+  .replace('<!-- PAGE_ENTRY -->', entry).replace('<!-- PAGE_CONTENT -->', content);
+await writeFile('dist/site/index.html', renderPage('DGLab-Majsoul · 入局，由你掌控。', homeMarkup));
+const dashboardPage = renderPage('游玩配置 | DGLab-Majsoul', '<noscript>请启用 JavaScript 以连接设备和雀魂脚本。</noscript>', `<script type="module" src="/app.js?v=${version}"></script>`);
+await writeFile('dist/site/play/index.html', dashboardPage);
+// Keep the existing game-to-dashboard entry on the same document, without a
+// redirect that could detach the cross-origin opener used for association.
+await writeFile('dist/site/link/index.html', dashboardPage);
 console.log(`Built ${version}; trusted dashboard: ${origin}; Pages output: dist/site`);

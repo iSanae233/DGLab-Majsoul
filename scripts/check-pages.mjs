@@ -36,7 +36,8 @@ try {
     await new Promise(resolve => setTimeout(resolve, 200));
   }
   assert.ok(ready, `Wrangler Pages did not start\n${output}`);
-  for (const path of ['/', '/app.js', '/style.css', '/favicon.svg', '/favicon.ico', '/site.webmanifest', '/assets/brand.svg', '/assets/apple-touch-icon.png', '/assets/icon-192.png', '/assets/icon-512.png', '/userscripts/dglab-majsoul.user.js']) {
+  let dashboardHtml;
+  for (const path of ['/', '/play/', '/app.js', '/style.css', '/favicon.svg', '/favicon.ico', '/site.webmanifest', '/assets/brand.svg', '/assets/apple-touch-icon.png', '/assets/icon-192.png', '/assets/icon-512.png', '/userscripts/dglab-majsoul.user.js']) {
     const response = await fetch(url + path, { signal: AbortSignal.timeout(10000) });
     assert.equal(response.status, 200, path);
     assert.equal(response.headers.get('x-content-type-options'), 'nosniff', path);
@@ -44,7 +45,21 @@ try {
     assert.match(response.headers.get('content-security-policy'), /frame-ancestors 'none'/, path);
     assert.match(response.headers.get('content-security-policy'), /manifest-src 'self'/, path);
     const body = await response.text();
-    if (path === '/') assert.match(body, /DGLab-Majsoul/);
+    if (path === '/') {
+      assert.match(body, /DGLab-Majsoul/);
+      assert.match(body, /href="\/play\/"/);
+      assert.match(body, /开始游玩/);
+      assert.match(body, /href="\/userscripts\/dglab-majsoul.user.js"/);
+      assert.match(body, /https:\/\/github.com\/iSanae233\/DGLab-Majsoul/);
+      assert.doesNotMatch(body, /<script\b/, 'the introduction never starts the dashboard');
+      assert.doesNotMatch(body, /__PAGE_TITLE__|PAGE_CONTENT|PAGE_ENTRY/);
+    }
+    if (path === '/play/') {
+      dashboardHtml = body;
+      assert.match(body, /游玩配置/);
+      assert.match(body, /<script type="module" src="\/app.js\?v=/);
+      assert.doesNotMatch(body, /__PAGE_TITLE__|PAGE_CONTENT|PAGE_ENTRY/);
+    }
     if (path.endsWith('.user.js')) {
       assert.equal(response.headers.get('cache-control'), 'no-store');
       assert.ok(body.includes(new URL(env.DASHBOARD_ORIGIN).origin));
@@ -57,8 +72,8 @@ try {
   assert.equal(reverse.status, 200);
   assert.equal(reverse.headers.get('cross-origin-opener-policy'), null);
   assert.match(reverse.headers.get('content-security-policy'), /frame-ancestors 'none'/);
-  assert.match(await reverse.text(), /DGLab-Majsoul/);
-  console.log('PASS dedicated reverse-link entry retains CSP and permits its opener');
+  assert.equal(await reverse.text(), dashboardHtml, 'reverse association opens configuration directly');
+  console.log('PASS reverse-link entry directly serves configuration, retains CSP and permits its opener');
 } finally {
   server.kill('SIGTERM');
   if (exitCode === undefined) await Promise.race([once(server, 'exit'), new Promise(resolve => setTimeout(resolve, 3000))]);

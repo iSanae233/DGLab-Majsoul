@@ -82,7 +82,10 @@ test('a directly opened game can open and associate its trusted dashboard', () =
   const gameWindow = { closed: false, postMessage: data => gm.receive({ source: dashboardWindow, origin: 'https://control.example', data }) };
   const dashboardWindow = { closed: false, postMessage: data => dm.receive({ source: gameWindow, origin: 'https://game.maj-soul.com', data }) };
   dm = new DashboardBridge({ crypto: webcrypto, opener: gameWindow, addEventListener() {}, removeEventListener() {} }, e => events.push(e), () => {});
-  gm = new GameBridge({ crypto: webcrypto, opener: null, open: () => dashboardWindow, addEventListener() {}, removeEventListener() {} }, 'https://control.example', () => {});
+  gm = new GameBridge({ crypto: webcrypto, opener: null, open: url => {
+    assert.equal(url, 'https://control.example/link/', 'installed scripts keep their direct configuration entry');
+    return dashboardWindow;
+  }, addEventListener() {}, removeEventListener() {} }, 'https://control.example', () => {});
   gm.connectDashboard(); assert.equal(dm.connected, true);
   gm.publish({ type: 'discard', connection: 1, seat: 0, tile: '1m' });
   assert.equal(events[0].type, 'discard');

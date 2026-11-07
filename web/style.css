@@ -37,6 +37,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .top-nav { display: flex; gap: 29px; }
 .top-nav a { text-decoration: none; color: #c3b8bd; font-size: 12px; padding: 12px 0; }
 .top-nav a:hover { color: #f6c6d0; }
+.top-nav a { display: inline-flex; align-items: center; gap: 5px; }
+.top-nav .icon { width: 13px; height: 13px; }
 .top-nav span { font-family: var(--mono); color: #947681; font-size: 10px; margin-right: 5px; }
 .top-note { display: inline-flex; align-items: center; gap: 8px; color: #baa6ae; font-size: 11px; letter-spacing: 2px; }
 .top-note .icon { width: 15px; color: var(--warm); }
@@ -207,6 +209,42 @@ time { font-family: var(--mono); color: #b49ba9; font-size: 10px; font-variant-n
 footer { display: flex; align-items: center; justify-content: space-between; gap: 20px; border-top: 1px solid var(--line); margin-top: 44px; padding: 28px 0 32px; color: #ad949f; font-size: 10px; }
 .footer-brand { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: #d2bfc7; font-size: 11px; }
 .footer-motto { font-family: var(--mono); font-size: 8px; letter-spacing: 1.6px; }
+.footer-links { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+.repository-link { display: inline-flex; align-items: center; gap: 9px; color: #d4b9c6; text-decoration: none; padding: 7px 0; font-size: 12px; }
+.repository-link:hover { color: #ffe1ee; }
+.repository-link > .icon:first-child { width: 18px; height: 18px; }
+.repository-link > .icon:last-child { width: 12px; height: 12px; color: #a48999; }
+.config-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 31px 0 25px; }
+.config-heading .eyebrow { margin-bottom: 9px; font-size: 9px; }
+.config-heading h1 { font-family: inherit; font-size: 28px; line-height: 1.4; font-weight: 550; letter-spacing: .5px; }
+.config-topbar .home-link { color: #d9b7c8; }
+.config-heading + .status-strip { margin-bottom: 22px; }
+.section-heading { margin-bottom: 22px; }
+.section-heading .section-symbol { width: 37px; height: 37px; border-radius: 8px; }
+.activity-heading { margin-bottom: 22px; }
+.simulation-toggle strong { margin-bottom: 0; }
+.landing-hero { padding-top: 64px; padding-bottom: 58px; }
+.landing-hero .hero-description { margin-top: 21px; }
+.landing-hero .hero-actions { gap: 12px; }
+.play-link { min-width: 152px; }
+.play-link > .icon:last-child { margin-left: 13px; width: 15px; }
+.landing-requirement { font-size: 11px; color: #a5909b; margin: 16px 0 0; line-height: 1.8; }
+.game-introduction { border-top: 1px solid var(--line); padding: 37px 0 33px; }
+.intro-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
+.intro-heading .eyebrow { margin-bottom: 12px; font-size: 9px; }
+.intro-heading h2, .start-copy h2 { font-family: var(--serif); font-size: 27px; font-weight: 400; letter-spacing: 1px; line-height: 1.5; }
+.intro-heading > p { color: #b79ba9; font-size: 12px; margin: 0 0 4px; }
+.feature-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px; }
+.feature-card { border: 1px solid #49333f; border-radius: 10px; padding: 25px; background: linear-gradient(135deg,#2b1c262a,#1a1519); }
+.feature-symbol { display: inline-flex; color: #daa0b6; margin-bottom: 20px; }
+.feature-symbol .icon { width: 25px; height: 25px; stroke-width: 1.2; }
+.feature-card h3 { font-size: 15px; color: #ead6df; margin-bottom: 12px; }
+.feature-card p { font-size: 13px; line-height: 1.9; color: #bda9b3; margin: 0; }
+.getting-started { display: flex; align-items: center; justify-content: space-between; gap: 32px; padding: 31px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.start-copy .eyebrow { font-size: 9px; margin-bottom: 12px; }
+.start-copy p { font-size: 13px; color: #bda9b3; line-height: 1.9; margin: 12px 0 0; }
+.getting-started > .button { flex-shrink: 0; padding: 12px 20px; }
+.landing footer { margin-top: 26px; }
 [hidden] { display: none !important; }
 @media (min-width: 1100px) { .activity-column { position: sticky; top: 101px; } }
 @media (max-width: 1100px) { .console { padding: 0 32px; } .hero-art { transform: scale(.88); } .status-strip { gap: 16px; } .card { padding: 24px; } .workspace { gap: 18px; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); } .hero-caption { display: none; } .footer-motto { display: none; } }
@@ -231,6 +269,31 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
   .install-button { padding: 9px 12px; font-size: 11px; gap: 7px; }
   .install-button > .icon:last-child { display: none; }
   .hero-art { width: 220px; height: 260px; transform: scale(.6); transform-origin: left center; margin-left: -20px; margin-top: 5px; overflow: clip; }
+  .landing-hero { grid-template-columns: minmax(0,1fr) 108px; padding-bottom: 30px; }
+  .landing-hero .hero-art { margin-left: -24px; }
+  .landing-hero .hero-period { display: none; }
+  .landing-hero .hero-description { position: relative; z-index: 1; font-size: 12px; }
+  .landing-hero .hero-actions { width: calc(100% + 108px); gap: 8px; }
+  .landing-hero .hero-actions .button { min-width: 0; min-height: 42px; padding: 10px 12px; font-size: 12px; }
+  .landing-hero .hero-actions .play-link > .icon:last-child { margin-left: 2px; width: 13px; }
+  .landing-requirement { width: calc(100% + 108px); font-size: 10px; }
+  .config-heading { padding: 25px 0 22px; gap: 10px; }
+  .config-heading h1 { font-size: 24px; }
+  .config-heading .eyebrow { font-size: 8px; }
+  .config-heading .install-button { font-size: 11px; padding: 9px 11px; }
+  .config-topbar .top-nav { gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .config-topbar .home-link { border-left: 0; padding: 0; color: #e4a8be; }
+  .config-topbar .brand { font-size: 15px; }
+  .config-topbar .top-nav a { font-size: 10px; }
+  .config-topbar .brand small { font-size: 6px; letter-spacing: 1px; }
+  .intro-heading { align-items: start; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+  .intro-heading h2, .start-copy h2 { font-size: 23px; }
+  .intro-heading > p { margin: 0; font-size: 11px; }
+  .feature-grid { grid-template-columns: 1fr; gap: 12px; }
+  .feature-card { padding: 22px; }
+  .feature-symbol { margin-bottom: 15px; }
+  .game-introduction { padding: 28px 0; }
+  .getting-started { flex-direction: column; align-items: stretch; gap: 22px; padding: 27px 0; }
   .tile-back { left: 0; top: 24px; }
   .tile-front { left: 82px; top: 95px; }
   .ring-one { left: 136px; top: 4px; }
@@ -271,6 +334,7 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
   .simulation-toggle { gap: 9px; padding: 12px; }
   .simulation-icon { display: none; }
   .simulation-toggle small { font-size: 10px; }
+  .simulation-toggle { min-height: 52px; }
   .game-launch { flex-direction: column; align-items: stretch; }
   .game-launch .field { flex: auto; }
   .pairing { grid-template-columns: 1fr; }
@@ -279,4 +343,5 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
   footer > :last-child { font-size: 9px; }
 }
 @media (max-width: 374px) { .console { padding: 0 14px; } .top-nav { gap: 10px; } .hero { grid-template-columns: minmax(0, 1fr) 95px; } .hero h1 { font-size: 40px; } .hero-art { transform: scale(.48); margin-left: -15px; } .status-strip { gap: 10px; } .status-item { font-size: 10px; } .compact-stop { font-size: 10px; } }
+@media (max-width: 374px) { .landing-hero .hero-art { transform: scale(.43); margin-left: 6px; } }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition: none !important; } }

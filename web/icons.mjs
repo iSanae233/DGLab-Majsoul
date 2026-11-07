@@ -1,5 +1,6 @@
 // Local SVGs keep controls recognizable without fonts or remote assets.
 const paths = {
+  github: '<path d="M9 19c-4 1-4-2-6-2m13 5v-4a3.5 3.5 0 0 0-1-2.8c3.3-.4 6.8-1.6 6.8-7.4a5.8 5.8 0 0 0-1.5-4 5.4 5.4 0 0 0-.1-4s-1.2-.4-4.1 1.5a14 14 0 0 0-7.4 0C5.8-.6 4.6-.2 4.6-.2a5.4 5.4 0 0 0-.1 4 5.8 5.8 0 0 0-1.5 4c0 5.8 3.5 7 6.8 7.4A3.5 3.5 0 0 0 9 18v4" transform="translate(0 2) scale(.9)"/>',
   link: '<path d="m10 13 4-4m-6 6-1.5 1.5a4.2 4.2 0 0 1-6-6L4 8m12 8 1.5-1.5a4.2 4.2 0 0 0-6-6L10 10" transform="translate(2 0)"/>',
   bolt: '<path d="m13 2-9 12h7l-1 8 10-13h-7z"/>',
   tiles: '<rect x="9" y="5" width="11" height="16" rx="2"/><path d="M6 18H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9M12 10h5m-5 4h5m-5 3h3"/>',

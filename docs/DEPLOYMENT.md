@@ -77,13 +77,13 @@ Pages 的 `wrangler.toml` 将 `RELAY_SESSIONS` 绑定到这个 Worker。默认�
 DASHBOARD_ORIGIN=https://你的实际域名 npm run check:pages
 ```
 
-该命令在 Pages 环境标记下构建，再启动锁定版本的 `wrangler pages dev`，检查首页、JS、CSS 和脚本下载的 HTTP 响应、CSP、COOP、缓存头及脚本来源绑定；结束后关闭临时服务。不会上传或部署，也不连接 DG-LAB 设备。
+该命令在 Pages 环境标记下构建，再启动锁定版本的 `wrangler pages dev`，检查静态介绍首页、`/play/` 配置页、JS、CSS、图标和脚本下载的 HTTP 响应、CSP、COOP、缓存头及脚本来源绑定；结束后关闭临时服务。不会上传或部署，也不连接 DG-LAB 设备。
 
 还没有域名时，可以用保留域名 `https://pages-build-check.invalid` 进行纯本地验收。这会生成仅用于验收的脚本，不应发布或安装后用于真实联动。检查结束后用实际域名重建，或运行 `npm run build` 恢复本地开发构建。
 
 ## 用户使用流程
 
-1. 打开控制台，从站点链接安装或更新用户脚本。
+1. 打开站点首页，安装或更新用户脚本，再点击“开始游玩”进入 `/play/`。
 2. 在控制台连接 V4 WSS 中继，用 DG-LAB 4 App 扫二维码，选择设备及通道。
 3. 在控制台设置规则，初次保留模拟。
 4. 点击“打开雀魂并连接脚本”。也可以先打开雀魂，在游戏小窗口点击“打开并关联控制台”；两种入口都会建立受校验的窗口引用。允许相应按钮打开新标签页。
@@ -108,4 +108,4 @@ DASHBOARD_ORIGIN=https://你的实际域名 npm run check:pages
 
 ### 反向关联专用入口
 
-游戏内按钮打开同一来源下的 `/link/`。普通首页保留 `same-origin-allow-popups`，仅 `/link/*` 移除 COOP，以防浏览器清空由游戏打开的控制台的 opener。CSP、禁止嵌入以及 origin/source/session 校验仍保留。不更改浏览器全局安全设置；不要把这个例外扩展到其他来源或所有路径。
+游戏内按钮打开同一来源下的 `/link/`，直接显示与 `/play/` 相同的配置页面，不跳转到介绍首页。首页不加载控制台脚本；普通首页与 `/play/` 保留 `same-origin-allow-popups`，仅 `/link/*` 移除 COOP，以防浏览器清空由游戏打开的控制台的 opener。CSP、禁止嵌入以及 origin/source/session 校验仍保留。不更改浏览器全局安全设置；不要把这个例外扩展到其他来源或所有路径。
