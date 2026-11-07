@@ -37,7 +37,7 @@ try {
   }
   assert.ok(ready, `Wrangler Pages did not start\n${output}`);
   let dashboardHtml;
-  for (const path of ['/', '/play/', '/app.js', '/style.css', '/favicon.svg', '/favicon.ico', '/site.webmanifest', '/assets/brand.svg', '/assets/apple-touch-icon.png', '/assets/icon-192.png', '/assets/icon-512.png', '/userscripts/dglab-majsoul.user.js']) {
+  for (const path of ['/', '/play/', '/app.js', '/style.css', '/favicon.svg', '/favicon.ico', '/site.webmanifest', '/assets/brand.svg', '/assets/chevron-down.svg', '/assets/apple-touch-icon.png', '/assets/icon-192.png', '/assets/icon-512.png', '/userscripts/dglab-majsoul.user.js']) {
     const response = await fetch(url + path, { signal: AbortSignal.timeout(10000) });
     assert.equal(response.status, 200, path);
     assert.equal(response.headers.get('x-content-type-options'), 'nosniff', path);

@@ -1,5 +1,6 @@
 import { DglabSocket, COYOTE_WAVEFORMS, COYOTE_WAVEFORM } from 'dglab-kit';
-import { customPlan, pointDelta } from './rules.mjs';
+import { customPlan, pointDelta, isPersistent, isReset } from './rules.mjs';
+import { waveformStream, takeFrames } from './waveform.mjs';
 
 export class DglabController {
   selection = null;
@@ -7,6 +8,7 @@ export class DglabController {
   active = null;
   generation = 0;
   resetWaiters = new Set();
+  pulseLoops = new Set();
   constructor(onDevices, onDisconnected, create = url => new DglabSocket({ url, responseTimeout: 15000 })) {
     this.onDevices = onDevices;
     this.onDisconnected = onDisconnected;
@@ -75,42 +77,96 @@ export class DglabController {
     const loss = plan.loss;
     plan = { ...customPlan({ ...plan, targetChannel: channelNames.length === 2 ? 'both' : channelNames[0], syncChannels: false }), loss };
     const { clientId, slotId } = this.selection;
-    const device = this.sdk.getClient(clientId).getDevice(slotId);
-    const prepared = channelNames.map(name => {
+    const prepare = () => channelNames.map(name => {
+      const device = this.sdk?.getClient(clientId)?.getDevice(slotId);
       const rule = plan.channels[name], channel = name === 'A' ? 0 : 1;
-      const base = device.props?.[`intensity${name}`];
-      const appMax = device.slotState?.[`channel${name}`]?.intensityMax;
+      const base = device?.props?.[`intensity${name}`];
+      const appMax = device?.slotState?.[`channel${name}`]?.intensityMax;
       if (!Number.isInteger(base) || base < 0 || base > 200 || !Number.isFinite(appMax) || appMax < 0) throw new Error(`缺少 ${name} 通道强度或上限反馈`);
-      const requested = plan.scaleByLoss && rule.mode !== 'reset' ? pointDelta(rule.delta, loss) : rule.delta;
-      const target = rule.mode === 'reset' ? 0 : Math.max(0, Math.min(base + requested, plan.maxIntensity, appMax, 200));
+      const requested = plan.scaleByLoss && !isReset(rule.mode) ? pointDelta(rule.delta, loss) : rule.delta;
+      const target = isReset(rule.mode) ? 0 : Math.max(0, Math.min(rule.action === 'set' ? requested : base + requested, plan.maxIntensity, appMax, 200));
       return { ...rule, name, channel, maxIntensity: plan.maxIntensity, delta: Math.floor(target) - base };
     });
-    this.active = { clientId, slotId, channels: prepared.map(rule => rule.channel) };
+    prepare(); // Reject incomplete channels before cancelling any existing work.
     const generation = ++this.generation;
+    await this.cancelPulseLoops();
+    if (generation !== this.generation) return { skipped: true };
+    // Clearing a previous waveform may wait for a remote acknowledgement.
+    // Re-read limits/base afterwards; an App update must not stale the delta.
+    const prepared = prepare();
+    this.active = { clientId, slotId, channels: prepared.map(rule => rule.channel) };
     const tasks = [];
     for (const rule of prepared) {
       const options = { immediate: true, timeout: rule.durationMs + 5000 };
-      if (rule.mode === 'reset') tasks.push(this.temporaryReset({ clientId, slotId, ...rule }, generation));
-      else if (rule.delta !== 0) tasks.push(rule.mode === 'permanent' ?
-        this.sdk.addIntensity(clientId, slotId, rule.channel, rule.delta, options) :
-        this.sdk.setTempIntensity(clientId, slotId, rule.channel, rule.delta, rule.durationMs, options));
-      if (rule.waveform && rule.durationMs > 0) tasks.push(this.sdk.sendPulse(clientId, slotId, rule.channel, rule.durationMs, COYOTE_WAVEFORMS[rule.waveform].raw, options));
+      const pulse = () => {
+        if (!rule.waveforms.length || generation !== this.generation) return Promise.resolve();
+        const stream = waveformStream(rule.waveforms, rule.waveformMode);
+        return isPersistent(rule.mode) ? this.startPulseLoop({ clientId, slotId, channel: rule.channel, stream }, generation) :
+          this.sdk.sendPulse(clientId, slotId, rule.channel, rule.durationMs, takeFrames(stream, Math.ceil(rule.durationMs / 100)), options);
+      };
+      if (rule.mode === 'reset') tasks.push(this.temporaryReset({ clientId, slotId, ...rule }, generation, pulse));
+      else if (rule.mode === 'permanent-reset') tasks.push((async () => {
+        await this.sdk.clearOperate(clientId, { slotId, channel: rule.channel });
+        if (generation !== this.generation) return;
+        await this.sdk.resetIntensity(clientId, slotId, rule.channel);
+        if (generation === this.generation) await pulse();
+      })());
+      else {
+        if (rule.delta !== 0) tasks.push(rule.mode === 'permanent' ? this.sdk.addIntensity(clientId, slotId, rule.channel, rule.delta, options) :
+          this.sdk.setTempIntensity(clientId, slotId, rule.channel, rule.delta, rule.durationMs, options));
+        if (rule.waveforms.length) tasks.push(pulse());
+      }
     }
-    if (!tasks.length) { this.active = null; return { skipped: true }; }
+    if (!tasks.length) return { skipped: true };
     await Promise.all(tasks);
     return { details: prepared.map(rule => ({ channel: rule.name, delta: rule.delta })) };
   }
-  async temporaryReset(rule, generation) {
+  async cancelPulseLoops() {
+    const loops = [...this.pulseLoops]; this.pulseLoops.clear();
+    for (const loop of loops) clearTimeout(loop.timer);
+    await Promise.all(loops.map(loop => loop.sdk.clearOperate(loop.clientId, { slotId: loop.slotId, channel: loop.channel })));
+  }
+  async startPulseLoop({ clientId, slotId, channel, stream }, generation) {
+    const loop = { clientId, slotId, channel, stream, sdk: this.sdk, timer: null };
+    this.pulseLoops.add(loop);
+    const current = () => generation === this.generation && this.sdk === loop.sdk && this.pulseLoops.has(loop);
+    const schedule = started => {
+      if (!current()) return;
+      loop.timer = setTimeout(() => {
+        if (!current()) return;
+        send().catch(async () => {
+          if (!current()) return;
+          this.onDisconnected();
+          await this.stop().catch(() => {});
+        });
+      }, Math.max(0, 1000 - (Date.now() - started)));
+    };
+    const send = async () => {
+      if (!current()) return;
+      if (!this.ready()) throw new Error('device-unavailable');
+      const state = loop.sdk.getClient(clientId)?.getDevice(slotId)?.slotState;
+      if (state?.[channel === 0 ? 'channelA' : 'channelB']?.isMuted === true) throw new Error('channel-muted');
+      const started = Date.now();
+      // Every App task is finite. Losing the browser/connection cannot leave
+      // an unbounded pulse task running; stop/new rules cancel future chunks.
+      await loop.sdk.sendPulse(clientId, slotId, channel, 1000, takeFrames(stream, 10), { immediate: true, timeout: 6000 });
+      schedule(started);
+    };
+    try { await send(); }
+    catch (error) { clearTimeout(loop.timer); this.pulseLoops.delete(loop); throw error; }
+  }
+  async temporaryReset(rule, generation, pulse = () => Promise.resolve()) {
     const sdk = this.sdk;
     await sdk.clearOperate(rule.clientId, { slotId: rule.slotId, channel: rule.channel });
     if (generation !== this.generation || this.sdk !== sdk) return;
     await sdk.resetIntensity(rule.clientId, rule.slotId, rule.channel);
     if (generation !== this.generation || this.sdk !== sdk) return;
-    await new Promise(resolve => {
+    const elapsed = new Promise(resolve => {
       const waiter = { resolve, timer: null };
       waiter.timer = setTimeout(() => { this.resetWaiters.delete(waiter); resolve(); }, rule.durationMs);
       this.resetWaiters.add(waiter);
     });
+    await Promise.all([elapsed, pulse()]);
     if (generation !== this.generation || this.sdk !== sdk) return;
     const device = sdk.getClient(rule.clientId)?.getDevice(rule.slotId);
     const base = device?.props?.[`intensity${rule.name}`];
@@ -126,14 +182,20 @@ export class DglabController {
     this.resetWaiters.clear();
     const target = this.active;
     this.active = null;
-    if (!target || !this.sdk) return;
-    const { clientId, slotId } = target;
-    const channels = target.channels || [target.channel];
-    if (channels.some(channel => ![0, 1].includes(channel))) throw new Error('invalid-stop-channel');
-    const results = await Promise.allSettled(channels.flatMap(channel => [
-      this.sdk.clearOperate(clientId, { slotId, channel }),
-      this.sdk.resetIntensity(clientId, slotId, channel),
-    ]));
+    const sdk = this.sdk;
+    const tasks = [this.cancelPulseLoops()];
+    if (target && sdk) {
+      const { clientId, slotId } = target;
+      const channels = target.channels || [target.channel];
+      if (channels.some(channel => ![0, 1].includes(channel))) tasks.push(Promise.reject(new Error('invalid-stop-channel')));
+      else tasks.push(...channels.flatMap(channel => [
+        sdk.clearOperate(clientId, { slotId, channel }),
+        sdk.resetIntensity(clientId, slotId, channel),
+      ]));
+    }
+    // Dispatch resets immediately; neither waveform cancellation nor another
+    // channel's clear acknowledgement may delay an emergency zero request.
+    const results = await Promise.allSettled(tasks);
     if (results.some(result => result.status === 'rejected')) throw new Error('停止未确认，请在 App 手动停止');
   }
   async disconnect() {

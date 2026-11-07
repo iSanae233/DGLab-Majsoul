@@ -102,15 +102,16 @@ test('compact summaries show different A/B profiles on two rows regardless of ou
   const card = document.querySelector('[data-trigger=tile-chi]');
   let rows = card.querySelectorAll('.rule-channel-summary');
   assert.equal(rows.length, 2);
-  assert.equal(rows[0].querySelector('strong').textContent, 'A');
-  assert.equal(rows[1].querySelector('strong').textContent, 'B');
-  assert.match(rows[0].textContent, /\+1.*5s/); assert.match(rows[1].textContent, /-10.*2.5s.*气泡/);
+  assert.equal(rows[0].querySelector('strong').textContent, 'A 通道');
+  assert.equal(rows[1].querySelector('strong').textContent, 'B 通道');
+  assert.match(rows[0].textContent, /\+1.*5 秒/); assert.match(rows[1].textContent, /-10.*2.5 秒/); assert.match(rows[1].title, /气泡/);
   event(card.querySelector('[data-field=edit]'), 'click');
   card.querySelector('[data-field=delta-b]').value = '1'; event(card.querySelector('[data-field=delta-b]'), 'input');
+  choose('[data-trigger=tile-chi] [data-field=action-b]', 'change');
   card.querySelector('[data-field=seconds-b]').value = '5'; event(card.querySelector('[data-field=seconds-b]'), 'input');
-  choose('[data-trigger=tile-chi] [data-field=waveform-b]', '');
+  const bubble = card.querySelector('[data-field=waves-b] input[value=BUBBLE]'); bubble.checked = false; event(bubble, 'change');
   rows = card.querySelectorAll('.rule-channel-summary');
-  assert.equal(rows.length, 1); assert.equal(rows[0].querySelector('strong').textContent, 'A/B');
+  assert.equal(rows.length, 1); assert.equal(rows[0].querySelector('strong').textContent, 'A/B 通道');
 });
 
 test('deal-in scaling checkbox stays visible in the compact rule without example numbers', () => {
@@ -124,4 +125,77 @@ test('deal-in scaling checkbox stays visible in the compact rule without example
   assert.equal(card.querySelector('[data-field=point-toggle]').closest('[data-field=editor]'), null);
   assert.match(card.querySelector('[data-field=preview]').textContent, /每千点 \+9/);
   assert.doesNotMatch(card.querySelector('[data-field=preview]').textContent, /3900|（/);
+});
+
+test('persistent/reset cards hide irrelevant controls and keep their summary compact', () => {
+  const ui = dashboard(); const { document, event, choose, add } = ui;
+  const card = add('tile-chi');
+  choose('[data-trigger=tile-chi] [data-field=mode]', 'permanent');
+  choose('[data-trigger=tile-chi] [data-field=action]', 'set');
+  card.querySelector('[data-field=delta]').value = '30'; event(card.querySelector('[data-field=delta]'), 'input');
+  assert.equal(card.querySelector('[data-field=duration]').hidden, true);
+  assert.equal(card.querySelector('[data-field=change]').hidden, false);
+  assert.match(card.querySelector('[data-field=preview]').textContent, /A\/B 通道.*持久变化.*调整到 30/);
+  assert.doesNotMatch(card.querySelector('[data-field=preview]').textContent, /秒/);
+  assert.equal(card.querySelector('[data-field=error]').textContent, '', 'the unset global cap is not repeated under saved rules');
+  const saved = JSON.parse(ui.storage.get('dglab-majsoul.rules.v1')).eventRules['tile-chi'];
+  assert.equal(saved.channels.A.durationMs, 0); assert.equal(saved.channels.A.action, 'set');
+  choose('[data-trigger=tile-chi] [data-field=mode]', 'permanent-reset');
+  assert.equal(card.querySelector('[data-field=change]').hidden, true);
+  assert.match(card.querySelector('[data-field=preview]').textContent, /持久归零/);
+  assert.doesNotMatch(card.querySelector('[data-field=preview]').textContent, /30|秒/);
+  choose('[data-trigger=tile-chi] [data-field=mode]', 'reset');
+  assert.equal(card.querySelector('[data-field=duration]').hidden, false);
+  assert.match(card.querySelector('[data-field=preview]').textContent, /临时归零.*5 秒/);
+  assert.equal(document.querySelector('#maximum').value, '0');
+});
+
+test('waveform checkboxes retain selection order, random mode and old-rule migration', () => {
+  const ui = dashboard(); const { event, choose, add } = ui;
+  const card = add('tile-pon');
+  for (const value of ['BUBBLE','EXTRUSTION']) {
+    const box = card.querySelector(`[data-field=waves] input[value=${value}]`); box.checked = true; event(box, 'change');
+  }
+  choose('[data-trigger=tile-pon] [data-field=wave-mode]', 'random');
+  const stored = JSON.parse(ui.storage.get('dglab-majsoul.rules.v1')).eventRules['tile-pon'];
+  assert.deepEqual(stored.channels.A.waveforms, ['BUBBLE','EXTRUSTION']);
+  assert.equal(stored.channels.A.waveformMode, 'random');
+  assert.equal(card.querySelector('[data-field=wave-summary]').textContent, '气泡、挤压');
+  assert.doesNotMatch(card.querySelector('[data-field=preview] .rule-channel-summary').title, /→/);
+  const restored = dashboard(ui.storage).document;
+  assert.equal(restored.querySelectorAll('[data-field=waves] input').length, 24);
+  assert.equal(restored.querySelector('[data-field=waves] input[value=BUBBLE]').checked, true);
+});
+
+test('waveform defaults keep App output; select all and none save predictable choices', () => {
+  const ui=dashboard(); const {event,add}=ui; const card=add('tile-chi');
+  const selected=()=>[...card.querySelectorAll('[data-field=waves] input')].filter(input=>input.checked);
+  assert.equal(selected().length,0);
+  assert.equal(card.querySelector('[data-field=wave-summary]').textContent,'跟随 App 波形');
+  event(card.querySelector('[data-field=wave-all]'),'click'); assert.equal(selected().length,24);
+  event(card.querySelector('[data-field=wave-none]'),'click'); assert.equal(selected().length,0);
+  assert.equal(card.querySelector('[data-field=wave-summary]').textContent,'跟随 App 波形');
+  assert.deepEqual(JSON.parse(ui.storage.get('dglab-majsoul.rules.v1')).eventRules['tile-chi'].channels.A.waveforms,[]);
+});
+
+test('signed changes and target input/slider stay within the requested integer ranges', () => {
+  const ui=dashboard(); const {event,choose,add}=ui; const card=add('tile-chi');
+  const number=card.querySelector('[data-field=delta]'), slider=card.querySelector('[data-field=slider]');
+  number.value='-200'; event(number,'input');
+  assert.match(card.querySelector('[data-field=preview]').textContent,/-200/);
+  assert.equal(slider.hidden,true);
+  choose('[data-trigger=tile-chi] [data-field=action]','set');
+  assert.equal(number.value,'0'); assert.equal(slider.hidden,false);
+  slider.value='176'; event(slider,'input'); assert.equal(number.value,'176');
+  number.value='999'; event(number,'change'); assert.equal(number.value,'200'); assert.equal(slider.value,'200');
+  const rule=JSON.parse(ui.storage.get('dglab-majsoul.rules.v1')).eventRules['tile-chi'];
+  assert.equal(rule.channels.A.action,'set'); assert.equal(rule.channels.A.delta,200);
+});
+
+test('positive relative values show a plus hint, negative and absolute values do not', () => {
+  const {event,choose,add}=dashboard(); const card=add('tile-chi'); const number=card.querySelector('[data-field=delta]');
+  number.value='24';event(number,'input'); assert.equal(card.querySelector('[data-field=positive]').hidden,false);
+  number.value='-24';event(number,'input'); assert.equal(card.querySelector('[data-field=positive]').hidden,true);
+  number.value='24';event(number,'input');choose('[data-trigger=tile-chi] [data-field=action]','set');
+  assert.equal(card.querySelector('[data-field=positive]').hidden,true);
 });

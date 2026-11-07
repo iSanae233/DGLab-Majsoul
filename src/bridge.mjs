@@ -157,7 +157,7 @@ export class GameBridge {
       channel: CHANNEL, kind: 'link-request', instance: this.instance,
     }, this.origin);
   }
-  stop() { this.send({ kind: 'stop' }); }
+  stop() { return this.send({ kind: 'stop' }); }
   destroy() { this.scope.removeEventListener('message', this.listener); }
 }
 import { validShortcut } from './shortcut.mjs';

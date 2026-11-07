@@ -14,7 +14,7 @@ test('custom instructions support synchronized or independent A/B channels', () 
 });
 test('permanent changes may be immediate; temporary/reset rules have bounded durations', () => {
   assert.equal(customPlan({ ...config, channels: { A: { ...rule, mode: 'permanent', durationMs: 0 } } }).channels.A.durationMs, 0);
-  for (const patch of [{ mode: 'temporary', durationMs: 0 }, { mode: 'reset', durationMs: 0 }, { durationMs: 60001 }, { delta: 41 }, { waveform: 'not-a-wave' }]) {
+  for (const patch of [{ mode: 'temporary', durationMs: 0 }, { mode: 'reset', durationMs: 0 }, { durationMs: 60001 }, { delta: 201 }, { waveform: 'not-a-wave' }]) {
     assert.throws(() => customPlan({ ...config, channels: { A: { ...rule, ...patch } } }));
   }
   assert.throws(() => customPlan({ ...config, channels: { A: { ...rule, delta: 0 } } }));
@@ -40,4 +40,17 @@ test('point-size rules round point units before multiplying the rate', async () 
   await engine.handle({ type: 'deal-in', connection: 1, round: '0:0:0', step: 1, loss: 3900 });
   await engine.handle({ type: 'deal-in', connection: 1, round: '0:0:1', step: 1, loss: 12000 });
   assert.match(logs[0], /3900.*\+4/); assert.match(logs[1], /12000.*\+12/);
+});
+
+test('absolute targets, persistent reset and waveform playlists validate before arming', () => {
+  const selected = { ...config, targetChannel: 'A', syncChannels: true };
+  const absolute = customPlan({ ...selected, channels: { A: { ...rule, mode: 'permanent', action: 'set', delta: 0, waveforms: ['BUBBLE','EXTRUSTION'], waveformMode: 'random' } } });
+  assert.equal(absolute.channels.A.durationMs, 0); assert.equal(absolute.channels.A.action, 'set');
+  assert.deepEqual(absolute.channels.A.waveforms, ['BUBBLE','EXTRUSTION']);
+  assert.match(describePlan(absolute), /调整到 0.*随机波形/); assert.doesNotMatch(describePlan(absolute), /秒/);
+  const reset = customPlan({ ...selected, channels: { A: { ...rule, mode: 'permanent-reset' } } });
+  assert.equal(reset.channels.A.delta, 0); assert.equal(reset.channels.A.durationMs, 0);
+  for (const patch of [{ action:'set',delta:201 },{ action:'set',delta:-1 },{ action:'unknown',delta:3 },{ waveforms:['BUBBLE','BUBBLE'] },{ waveforms:['wrong'] },{ waveformMode:'unknown' }]) {
+    assert.throws(() => customPlan({ ...selected, channels: { A: { ...rule, ...patch } } }));
+  }
 });

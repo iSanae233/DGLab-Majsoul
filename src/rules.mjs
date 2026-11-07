@@ -1,7 +1,25 @@
 import { COYOTE_WAVEFORMS } from 'dglab-kit';
 import { TRIGGERS, triggerLabel } from './triggers.mjs';
 export const WAVEFORMS = Object.entries(COYOTE_WAVEFORMS).map(([value, wave]) => ({ value, label: wave.label.cn }));
-export const STRENGTH_MODES = { temporary: '强度临时变化', permanent: '强度永久变化', reset: '强度临时归零' };
+export const STRENGTH_MODES = { temporary: '强度临时变化', permanent: '强度持久变化', reset: '强度临时归零', 'permanent-reset': '强度持久归零' };
+export const isPersistent = mode => mode === 'permanent' || mode === 'permanent-reset';
+export const isReset = mode => mode === 'reset' || mode === 'permanent-reset';
+export function normalizeRule(rule) {
+  if (!rule || !Object.hasOwn(STRENGTH_MODES, rule.mode)) throw new Error('请选择有效的强度操作');
+  const previousAction = rule.action ?? 'change';
+  if (!['change', 'add', 'subtract', 'set'].includes(previousAction)) throw new Error('请选择变化或调整到');
+  const action = previousAction === 'set' ? 'set' : 'change';
+  const delta = isReset(rule.mode) ? 0 : rule.delta;
+  if (!Number.isInteger(delta) || (action === 'set' ? delta < 0 || delta > 200 : Math.abs(delta) > 200)) throw new Error('变化需为 -200 至 +200，调整到需为 0–200 的整数');
+  const durationMs = isPersistent(rule.mode) ? 0 : rule.durationMs;
+  if (!Number.isInteger(durationMs) || durationMs < 0 || durationMs > 60000) throw new Error('临时操作时长需为 0.1–60 秒');
+  const waveforms = rule.waveforms === undefined ? (rule.waveform ? [rule.waveform] : []) : rule.waveforms;
+  if (!Array.isArray(waveforms) || waveforms.length > WAVEFORMS.length || new Set(waveforms).size !== waveforms.length ||
+    waveforms.some(key => !Object.hasOwn(COYOTE_WAVEFORMS, key))) throw new Error('请选择有效且不重复的波形');
+  const waveformMode = rule.waveformMode ?? 'sequence';
+  if (!['sequence', 'random'].includes(waveformMode)) throw new Error('请选择波形播放方式');
+  return { mode: rule.mode, action, delta, durationMs, waveforms: [...waveforms], waveformMode };
+}
 export function pointDelta(delta, loss) {
   if (!Number.isFinite(delta) || !Number.isSafeInteger(loss) || loss <= 0 || loss > 10000000) throw new Error('点炮失分或变化系数无效');
   const result = Math.round(loss / 1000) * delta;
@@ -14,22 +32,21 @@ export function customPlan(config) {
   const channels = {};
   for (const channel of selected) {
     const rule = config.channels?.[config.syncChannels ? 'A' : channel];
-    if (!rule || !Object.hasOwn(STRENGTH_MODES, rule.mode)) throw new Error('请选择有效的强度操作');
-    if (!Number.isInteger(rule.delta) || Math.abs(rule.delta) > 40) throw new Error('自定义强度变化需为 -40 至 +40 的整数');
-    if (!Number.isInteger(rule.durationMs) || rule.durationMs < 0 || rule.durationMs > 60000 ||
-        (rule.mode !== 'permanent' && rule.durationMs < 100)) throw new Error('临时操作需 0.1–60 秒，永久变化可设 0 秒');
-    const waveform = rule.waveform || null;
-    if (waveform && !Object.hasOwn(COYOTE_WAVEFORMS, waveform)) throw new Error('请选择有效的覆盖波形');
-    if (rule.mode !== 'reset' && rule.delta === 0 && (!waveform || rule.durationMs === 0)) throw new Error('请设置强度变化或覆盖波形');
-    channels[channel] = { mode: rule.mode, delta: rule.mode === 'reset' ? 0 : rule.delta, durationMs: rule.durationMs, waveform };
+    const normalized = normalizeRule(rule);
+    if (!isPersistent(normalized.mode) && normalized.durationMs < 100) throw new Error('临时操作时长需为 0.1–60 秒');
+    if (!isReset(normalized.mode) && normalized.action !== 'set' && normalized.delta === 0 && !normalized.waveforms.length) throw new Error('请设置强度变化或勾选波形');
+    channels[channel] = normalized;
   }
   return { strategy: 'custom', maxIntensity: config.maxIntensity, channels, scaleByLoss: config.scaleByLoss === true };
 }
 export function describePlan(plan) {
   return Object.entries(plan.channels).map(([channel, rule]) => {
-    const scaled = plan.scaleByLoss && rule.mode !== 'reset' && plan.loss;
+    const scaled = plan.scaleByLoss && !isReset(rule.mode) && plan.loss;
     const delta = scaled ? pointDelta(rule.delta, plan.loss) : rule.delta;
-    return `${channel} 通道：${STRENGTH_MODES[rule.mode]}${rule.mode === 'reset' ? '' : ` ${delta >= 0 ? '+' : ''}${delta}${plan.scaleByLoss && !scaled ? ' / 每千点' : ''}`}，${rule.durationMs / 1000} 秒${rule.waveform ? `，波形 ${WAVEFORMS.find(w => w.value === rule.waveform)?.label}` : '，保持 App 波形'}`;
+    const change = isReset(rule.mode) ? '' : rule.action === 'set' ? ` 调整到 ${delta}` : ` ${delta >= 0 ? '+' : ''}${delta}`;
+    const duration = isPersistent(rule.mode) ? '' : `，${rule.durationMs / 1000} 秒`;
+    const waves = rule.waveforms?.length ? `，${rule.waveformMode === 'random' ? '随机' : '顺序'}波形 ${rule.waveforms.map(key => WAVEFORMS.find(w => w.value === key).label).join(rule.waveformMode === 'random' ? '、' : ' → ')}` : '，跟随 App 波形';
+    return `${channel} 通道：${STRENGTH_MODES[rule.mode]}${change}${plan.scaleByLoss && !scaled && !isReset(rule.mode) ? ' / 每千点' : ''}${duration}${waves}`;
   }).join('；');
 }
 export function customEventPlans(config) {
