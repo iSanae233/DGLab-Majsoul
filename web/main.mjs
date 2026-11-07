@@ -204,7 +204,7 @@ function mount() {
       await engine.stop();
       if (!bridge.connected) throw new Error('请先从本页打开雀魂并等待脚本连接');
       const modern = Number(scriptVersion?.split('.')[0]) > 0 || Number(scriptVersion?.split('.')[1]) >= 7;
-      if (!modern) throw new Error('请更新用户脚本到 0.7.0，再刷新并关联雀魂后启用');
+      if (!modern) throw new Error('请更新用户脚本到 0.7.0 或更新版本，再刷新并关联雀魂后启用');
       const device = devices.find(item => JSON.stringify([item.clientId, item.slotId]) === ui.device.value);
       controller.selection = device ? { ...device, channel: ui.channel.value === 'both' ? 'both' : Number(ui.channel.value) } : null;
       engine.arm(config()); log(ui.simulation.checked ? '模拟已启用' : '真实输出已启用；重连或异常后需重新启用');
@@ -222,7 +222,7 @@ function mount() {
     badge('relay', '中继未连接'); ui['relay-message'].textContent = '连接已断开。';
   });
   ui.copy.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(JSON.stringify({ version: '0.7.0', total, events: recent }, null, 2)); ui.copy.textContent = '已复制'; }
+    try { await navigator.clipboard.writeText(JSON.stringify({ version: '0.7.1', total, events: recent }, null, 2)); ui.copy.textContent = '已复制'; }
     catch { ui.copy.textContent = '复制失败，请允许剪贴板访问'; }
   });
   ui.clear.addEventListener('click', () => { recent.length = 0; renderEvents(); });

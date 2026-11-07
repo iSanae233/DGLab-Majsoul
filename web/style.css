@@ -161,3 +161,7 @@ input:not([type=checkbox]), select, textarea { font-size: 14px; min-height: 46px
 .rule-error { color: #d6b58c; font-size: 12px; line-height: 1.7; margin: 12px 0; }
 .rule-error:empty { display: none; }
 .rule-done { margin-top: 14px; width: 100%; padding: 10px; }
+.rule-channel-summary { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.rule-channel-summary strong { color: #9cd9c9; font-size: 12px; font-weight: 600; }
+.rule-channel-summary > span { min-width: 0; overflow-wrap: anywhere; }
+.rule-channel-summary + .rule-channel-summary { border-top: 1px solid #2a413d; margin-top: 6px; padding-top: 6px; }

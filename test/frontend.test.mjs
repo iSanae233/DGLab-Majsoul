@@ -93,3 +93,22 @@ test('invalid stored settings cannot create rules, exceed the cap or enable outp
   assert.equal(document.querySelector('#simulation').checked, true);
   assert.equal(document.querySelector('#operation-status').textContent, '未启用');
 });
+
+test('compact summaries show different A/B profiles on two rows regardless of output selection', () => {
+  const profile = { mode: 'temporary', delta: 1, durationMs: 5000, waveform: null };
+  const storage = new Map([['dglab-majsoul.rules.v1', JSON.stringify({ version: 1, maxIntensity: 30, targetChannel: 'A', stopShortcut: 'F7',
+    eventRules: { 'tile-chi': { enabled: true, syncChannels: false, channels: { A: profile, B: { ...profile, delta: -10, durationMs: 2500, waveform: 'BUBBLE' } } } } })]]);
+  const ui = dashboard(storage); const { document, event, choose } = ui;
+  const card = document.querySelector('[data-trigger=tile-chi]');
+  let rows = card.querySelectorAll('.rule-channel-summary');
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].querySelector('strong').textContent, 'A');
+  assert.equal(rows[1].querySelector('strong').textContent, 'B');
+  assert.match(rows[0].textContent, /\+1.*5s/); assert.match(rows[1].textContent, /-10.*2.5s.*气泡/);
+  event(card.querySelector('[data-field=edit]'), 'click');
+  card.querySelector('[data-field=delta-b]').value = '1'; event(card.querySelector('[data-field=delta-b]'), 'input');
+  card.querySelector('[data-field=seconds-b]').value = '5'; event(card.querySelector('[data-field=seconds-b]'), 'input');
+  choose('[data-trigger=tile-chi] [data-field=waveform-b]', '');
+  rows = card.querySelectorAll('.rule-channel-summary');
+  assert.equal(rows.length, 1); assert.equal(rows[0].querySelector('strong').textContent, 'A/B');
+});

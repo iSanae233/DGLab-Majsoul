@@ -84,15 +84,20 @@ export class RuleEditor {
       fields.delta.disabled = rule.channels.A.mode === 'reset'; fields['delta-b'].disabled = rule.channels.B.mode === 'reset';
       fields['delta-caption'].textContent = rule.scaleByLoss ? '每 1000 点强度变化' : '强度变化';
       fields['delta-caption-b'].textContent = rule.scaleByLoss ? 'B 通道每 1000 点强度变化' : 'B 通道强度变化';
-      const names = this.context().targetChannel === 'both' ? ['A','B'] : [this.context().targetChannel || 'A'];
+      const channelA = rule.channels.A, channelB = rule.syncChannels ? channelA : rule.channels.B;
+      const equivalent = channelA.mode === channelB.mode && (channelA.mode === 'reset' || channelA.delta === channelB.delta) &&
+        channelA.durationMs === channelB.durationMs && (channelA.waveform || null) === (channelB.waveform || null);
+      const displayed = equivalent ? [['A/B', channelA]] : [['A', channelA], ['B', channelB]];
       const signed = value => `${value >= 0 ? '+' : ''}${value}`;
-      fields.preview.textContent = names.map(name => {
-        const profile = rule.channels[rule.syncChannels ? 'A' : name];
+      fields.preview.replaceChildren(...displayed.map(([name, profile]) => {
         const mode = { temporary: '临时', permanent: '永久', reset: '归零' }[profile.mode];
         const change = profile.mode === 'reset' ? '' : rule.scaleByLoss ? ` 每千点 ${signed(profile.delta)}（3900点 ${signed(pointDelta(profile.delta,3900))}）` : ` ${signed(profile.delta)}`;
         const wave = profile.waveform ? ` · ${WAVEFORMS.find(item => item.value === profile.waveform)?.label}` : '';
-        return `${name} ${mode}${change} · ${profile.durationMs / 1000}s${wave}`;
-      }).join('；');
+        const row = document.createElement('span'); row.className = 'rule-channel-summary';
+        const channel = document.createElement('strong'); channel.textContent = name;
+        const description = document.createElement('span'); description.textContent = `${mode}${change} · ${profile.durationMs / 1000}s${wave}`;
+        row.append(channel, description); return row;
+      }));
       if (!rule.enabled) { fields.state.textContent = '已停用'; fields.error.textContent = ''; continue; }
       try {
         customPlan({ ...this.context(), channels: rule.channels, syncChannels: rule.syncChannels, scaleByLoss: rule.scaleByLoss });
