@@ -1,8 +1,18 @@
-# Cloudflare Pages 部署
+# 部署说明
 
-控制台由 Pages 托管。0.4.0 在根路径增加 WebSocket Function，通过外部 Worker 的 Durable Object 管理 V4 会话；普通 HTTPS 请求仍提供静态控制台。服务端不保存设备输出历史或配对凭据数据库。
+本项目使用 Cloudflare Pages 托管首页和配置页，通过独立 Worker 的 Durable Object 提供 V4 WebSocket 中继。
 
-## 本地
+当前站点：
+
+- 首页：`https://dglab-majsoul.pages.dev/`
+- 配置页：`https://dglab-majsoul.pages.dev/play/`
+- 中继：`wss://dglab-majsoul.pages.dev`
+
+同一域名下，普通 HTTPS 请求返回页面，WebSocket 请求交给中继处理。
+
+## 本地运行
+
+使用 Node.js 22+：
 
 ```sh
 npm ci
@@ -10,9 +20,37 @@ npm test
 npm run dev
 ```
 
-打开 `http://127.0.0.1:4173`。该构建的脚本只信任这个精确来源，`localhost:4173` 不等价。`npm run preview` 可只启动已构建的静态站点。
+打开 `http://127.0.0.1:4173`，再从首页进入配置页。`npm run preview` 只启动已构建的静态站点。
 
-## Git 集成配置
+本地构建的脚本只信任 `http://127.0.0.1:4173`，`localhost:4173` 不等价。正式中继只接受配置的控制台来源；本地真实配对需要使用接受本地来源的中继。
+
+## 部署顺序
+
+先部署中继 Worker，再部署 Pages。两个项目连接同一个 GitHub 仓库，但构建方式不同。
+
+本仓库在 `relay/worker.mjs` 定义 `RelaySession`，Pages 通过 `script_name` 绑定它。中继只转发 V4 外层消息，不生成或修改设备指令，也不保存设备输出历史。
+
+### 中继 Worker
+
+| 设置 | 值 |
+| --- | --- |
+| Repository | `iSanae233/DGLab-Majsoul` |
+| Worker name | `dglab-majsoul-relay` |
+| Build command | `node --version` |
+| Deploy command | `npx wrangler deploy --config relay/wrangler.toml` |
+| Preview builds | 关闭，避免预览版本改变配对会话 |
+
+`relay/wrangler.toml` 已包含 SQLite Durable Object 的首次迁移配置。`workers_dev=false`，中继通过 Pages 的绑定访问。
+
+如果本地已有 Wrangler 授权，也可以运行：
+
+```sh
+npm run deploy:relay
+```
+
+### Cloudflare Pages
+
+在 Cloudflare 创建 **Pages** 项目并连接仓库：
 
 | 设置 | 值 |
 | --- | --- |
@@ -20,22 +58,14 @@ npm run dev
 | Root directory | 仓库根目录 |
 | Build command | `npm run build` |
 | Build output directory | `dist/site` |
+| Node version | 22，仓库已提供 `.node-version` |
 | Environment variable | `DASHBOARD_ORIGIN=https://你的正式域名` |
-| Node version | 22（仓库 `.node-version`） |
 
-`wrangler.toml` 也声明了输出目录。GitHub 仓库为 `iSanae233/DGLab-Majsoul`；Pages 项目已部署，正式地址为 https://dglab-majsoul.pages.dev 。
+Pages 会在构建后上传静态产物，不需要另外填写 `npx wrangler deploy`。
 
-本项目实际 Pages 域名为 `https://dglab-majsoul.pages.dev`，已在 `wrangler.toml` 的 `[vars]` 中配置 `DASHBOARD_ORIGIN`。Pages 读取 Wrangler 配置时，应以仓库中的变量为准；首次部署实测发现只在创建界面填写变量，构建仍可能报告没有变量。更换域名时同步修改此配置，并重新构建、部署和安装脚本。
+`wrangler.toml` 已声明输出目录、`RELAY_SESSIONS` 绑定和当前站点的 `DASHBOARD_ORIGIN`。更换域名时，同步修改根目录与 `relay/` 下的 Wrangler 配置，再重新构建、部署并更新用户脚本。Pages 使用仓库中的 Wrangler 配置时，只修改控制台变量可能不会生效。
 
-### 避免误建为 Workers 项目
-
-Cloudflare 的“Workers & Pages”入口包含两种不同项目。如果日志中出现单独的 **Deploy command: `npx wrangler deploy`**，并报 `Missing entry-point to Worker script or to assets directory`，说明进入了 Workers 构建流程。本仓库的 `pages_build_output_dir` 配置用于 Pages，不能交给这个 Workers 部署命令。
-
-在 Cloudflare 创建 **Pages** 项目并连接本仓库，按上表填写构建命令和输出目录。Git 集成的 Pages 会在构建后自动上传静态输出，不需要添加 `npx wrangler deploy`。无需删除已有 Worker，避免误删其他配置。
-
-构建脚本识别 `WORKERS_CI=1` 后会明确报出项目类型不匹配；Pages 或通用 CI 构建缺少 HTTPS `DASHBOARD_ORIGIN` 时，也会失败，避免错误地产生信任本地地址的线上脚本。
-
-确定项目域名后，在生产构建环境中设置精确的 `DASHBOARD_ORIGIN`，例如 `https://dglab-majsoul.pages.dev`，然后构建。不要直接照抄示例域名，也不要使用通配符。
+`DASHBOARD_ORIGIN` 填写控制台的精确来源，例如 `https://dglab-majsoul.pages.dev`。只填写协议、域名和端口，不添加路径、查询参数或末尾斜线，也不要使用通配符。
 
 本地生成正式发布物：
 
@@ -43,77 +73,66 @@ Cloudflare 的“Workers & Pages”入口包含两种不同项目。如果日志
 DASHBOARD_ORIGIN=https://你的正式域名 npm run build
 ```
 
-将完整 `dist/site` 作为静态产物部署。Cloudflare Pages 自动构建环境若没有设置此变量，构建会明确失败，避免发布仍信任本地地址的脚本。
+部署完整的 `dist/site/`。Pages 或通用 CI 构建缺少有效 HTTPS 来源时会直接失败，避免生成仍信任本地地址的线上脚本。
 
-官方参考：[构建配置](https://developers.cloudflare.com/pages/configuration/build-configuration/)、[静态响应头](https://developers.cloudflare.com/pages/configuration/headers/)。
+### 项目类型选错时
 
-## 独立中继部署（0.4.0）
+如果日志里出现单独的 `Deploy command: npx wrangler deploy`，并报 `Missing entry-point to Worker script or to assets directory`，请检查是否把前端建成了 Workers 项目。
 
-需要先部署 `dglab-majsoul-relay` Worker，再部署 Pages。Pages 无法在自身项目内定义 Durable Object 类，因此 `RelaySession` 在独立 Worker 中定义并通过 `script_name` 绑定。
+前端应使用 Pages，输出目录为 `dist/site`；独立中继才使用 `relay/wrangler.toml`。构建脚本检测到 `WORKERS_CI=1` 时，也会提示项目类型不匹配。
 
-中继 Worker 的 Git 构建设置：
+Cloudflare 参考文档：[构建配置](https://developers.cloudflare.com/pages/configuration/build-configuration/)、[静态响应头](https://developers.cloudflare.com/pages/configuration/headers/)。
 
-| 设置 | 值 |
+## 部署检查
+
+| 命令 | 检查内容 |
 | --- | --- |
-| Repository | iSanae233/DGLab-Majsoul |
-| Worker name | dglab-majsoul-relay |
-| Build command | `node --version`（不执行前端的 Pages 构建） |
-| Deploy command | `npx wrangler deploy --config relay/wrangler.toml` |
-| Preview builds | 关闭，避免预览版本改变配对会话 |
+| `npm test` | 协议、规则、消息边界、模拟 SDK 指令和界面逻辑 |
+| `DASHBOARD_ORIGIN=https://你的正式域名 npm run check:pages` | 本地 Pages 页面、静态资源、响应头和脚本来源 |
+| `npm run check:relay` | 本地 Cloudflare 中继、配对、消息转发和会话隔离 |
+| `npm run check:relay:remote` | 正式 WSS 的临时会话与模拟 App 通信 |
 
-`relay/wrangler.toml` 包含 SQLite Durable Object 的首次迁移；`workers_dev=false`，通过 Pages 的绑定访问。已有 CLI 授权时也可运行 `npm run deploy:relay`。
+这些命令不向真实设备发送输出。远端中继检查会建立临时测试会话；本地 Pages 检查只启动临时服务，不上传或部署。
 
-Pages 的 `wrangler.toml` 将 `RELAY_SESSIONS` 绑定到这个 Worker。默认地址为 `wss://dglab-majsoul.pages.dev`，App 配对地址为同一地址加 `?tid=<控制方ID>`。不依赖官方中继代转；自建中继只转发 V4 外层消息，不生成或修改设备指令。
+还没有正式域名时，可以使用 `https://pages-build-check.invalid` 做本地 Pages 检查。完成后请用实际域名重新构建，不要发布仅用于检查的脚本。
 
-控制方连接检查精确 `Origin`，App 连接使用随机 UUID 配对 ID；配对 ID 是访问会话的能力凭据，不应公开。每会话最多 8 个 App，文本帧上限 64KiB，无 App 时 5 分钟关闭控制连接。不同会话由不同 Durable Object 隔离；未知目标客户端不能跨会话转发。
+v1.0.0 的测试和 review 结果见 [验证说明](VALIDATION.md)。
 
-线上无设备协议验收：`npm run check:relay:remote`（仅创建临时测试会话与模拟 App，不输出设备指令）。
+## 升级与使用
 
-本地验收：`npm run check:relay` 使用 Cloudflare 本地运行时，覆盖 Pages 路由、配对、双向 V4 消息、心跳、断开和会话隔离，不控制真实设备。SQLite Durable Objects 支持 Cloudflare Free 方案，但配额和实际费用以账号设置及 Cloudflare 官方价格为准；部署不包含升级付费方案。
+1. 部署完成后，刷新首页和配置页。
+2. 从站点更新 Tampermonkey 脚本，再刷新雀魂，启用新的图标浮窗。
+3. 在配置页连接中继，用 DG-LAB 4 App 扫码，选择设备及通道。
+4. 添加规则，设置上限和快捷键，先保留模拟模式。
+5. 从控制台打开雀魂，或在游戏内点击图标，再选择“打开并关联控制台”。
+6. 等待“雀魂脚本已连接”，再点击“应用设置并启用”。游玩时保持控制台开启。
 
-## 本地 Pages 验收
+旧版带符号强度和单波形规则可以继续读取。新规则默认跟随 App 波形，控制台刷新后始终为模拟、未启用。只刷新控制台不会更新雀魂里已运行的旧脚本。
 
-```sh
-DASHBOARD_ORIGIN=https://你的实际域名 npm run check:pages
-```
-
-该命令在 Pages 环境标记下构建，再启动锁定版本的 `wrangler pages dev`，检查静态介绍首页、`/play/` 配置页、JS、CSS、图标和脚本下载的 HTTP 响应、CSP、COOP、缓存头及脚本来源绑定；结束后关闭临时服务。不会上传或部署，也不连接 DG-LAB 设备。
-
-还没有域名时，可以用保留域名 `https://pages-build-check.invalid` 进行纯本地验收。这会生成仅用于验收的脚本，不应发布或安装后用于真实联动。检查结束后用实际域名重建，或运行 `npm run build` 恢复本地开发构建。
-
-## 用户使用流程
-
-1. 打开站点首页，安装或更新用户脚本，再点击“开始游玩”进入 `/play/`。
-2. 在控制台连接 V4 WSS 中继，用 DG-LAB 4 App 扫二维码，选择设备及通道。
-3. 在控制台设置规则，初次保留模拟。
-4. 点击“打开雀魂并连接脚本”。也可以先打开雀魂，在游戏小窗口点击“打开并关联控制台”；两种入口都会建立受校验的窗口引用。允许相应按钮打开新标签页。
-5. 等控制台显示“雀魂脚本已连接”，再点击“应用设置并启用”。控制台保持打开。
-6. 点击雀魂右上角的 DGLab 小图标展开面板，查看本地公开数据流和控制台返回的模拟、输出、停止或失败信息；面板内也可关联控制台或停止联动。
-
-更换域名后必须重新构建、部署并更新用户脚本。预览部署地址不会自动获得信任；如需测试预览站点，应为其单独构建脚本。
-
-刷新控制台会丢失窗口引用、配对和启用状态；可从雀魂小窗口重新打开并关联控制台，或关闭旧游戏窗口后从控制台重新打开。刷新雀魂会让控制台停用联动，当前局恢复动作不触发惩罚。浏览器扩展、弹窗策略或雀魂未来的隔离响应头可能切断窗口关系，此时脚本只在本页显示事件，不能启用控制。LIVE ACTIVITY 会报告尚未检测到脚本；应检查最新脚本是否启用及其游戏内版本标识。
+刷新或断开后，需要重新关联、配对并启用。可以从游戏图标重新打开控制台，也可以关闭旧游戏窗口后，从控制台重新打开雀魂。恢复的历史动作不触发惩罚。
 
 ## 通信边界
 
-双向 `postMessage` 检查精确 `origin`、窗口 `source`、随机会话编号和脚本实例编号。点炮事件需要合法字段、新的消息序号以及不超过 10 秒的时间差。页面时钟相同，但后台标签页调度延迟仍可能导致事件过期并停用。
+用户脚本只接受构建时指定的控制台来源。双向 `postMessage` 会检查精确 `origin`、窗口 `source`、会话和脚本实例；事件还需通过序号和字段校验。点炮等实时触发事件超过 10 秒会被拒绝。后台标签页调度延迟也可能让事件过期。
 
-这些检查能隔离其他来源和其他标签页，并不能防御雀魂页面自身或控制台站点自身被入侵。两个来源都是信任边界的一部分。
+控制方连接中继时，必须匹配 `DASHBOARD_ORIGIN`。App 使用随机 UUID 配对 ID 连接，这个 ID 是访问会话的凭据，请勿公开配对链接。
 
-配对凭据留在控制台内存；不通过事件桥接传给雀魂、不放入雀魂 URL，也不持久化。传输的是规范化牌局事件和操作文字，不传原始协议、认证 token 或手牌。
+中继按会话隔离，未知客户端不能跨会话转发。每个会话最多接入 8 个 App，文本帧上限为 64KiB；没有 App 时，控制连接在 5 分钟后关闭。
 
-`web/_headers` 配置 CSP、禁止嵌入和缓存策略。`same-origin-allow-popups` 用于保留本控制台主动打开的跨源窗口，不要改成 `same-origin` 后仍假定桥接可用。CSP 的 `connect-src wss:` 允许用户自选 WSS 中继；控制台仅在用户点击连接后发起连接。
+配对凭据保留在控制台内存，不通过事件桥接传给雀魂，也不写入游戏 URL 或本地规则配置。桥接传输的是公开牌局事件和操作文字，不传认证 token、原始协议消息或私有手牌。
 
-断开、超时或刷新会停用联动，重新握手不会自动恢复真实输出。两端心跳超时为 90 秒；设备任务期限最多 10 秒。网络或标签页被强制关闭时不能保证停止请求送达，应能在 App 或设备端手动停止。
+这些检查用于隔离其他来源和标签页，不能防御雀魂页面或控制台站点自身被入侵。
 
-### 反向关联专用入口
+### 反向关联入口
 
-游戏内按钮打开同一来源下的 `/link/`，直接显示与 `/play/` 相同的配置页面，不跳转到介绍首页。首页不加载控制台脚本；普通首页与 `/play/` 保留 `same-origin-allow-popups`，仅 `/link/*` 移除 COOP，以防浏览器清空由游戏打开的控制台的 opener。CSP、禁止嵌入以及 origin/source/session 校验仍保留。不更改浏览器全局安全设置；不要把这个例外扩展到其他来源或所有路径。
+游戏内的关联按钮打开 `/link/`，直接显示与 `/play/` 相同的配置文档，不先跳到介绍页。
 
-## 升级到 v1.0.0
+普通页面保留 `Cross-Origin-Opener-Policy: same-origin-allow-popups`。只有 `/link/*` 移除该响应头，保留游戏窗口打开控制台时需要的 `opener`。CSP 和消息校验仍然保留，不要把这个例外扩大到所有路径。
 
-部署完成后，刷新首页与 `/play/` 配置页。玩家需从站点的“安装 / 更新脚本”链接更新 Tampermonkey 脚本并刷新雀魂，才会显示图标浮窗；只刷新控制台不会替换已运行的旧脚本。
+响应头配置见 `web/_headers`。CSP 的 `connect-src wss:` 允许用户填写兼容中继，页面只在点击连接后发起连接。
 
-旧版带符号强度与单波形规则会被兼容读取。新规则仍默认跟随 App 波形、模拟且未启用；使用真实输出前重新选择设备并手动启用。持久波形轮播在下一条规则、停止或断开时取消，浏览器被强制关闭时的停止请求仍不能保证送达。
+### 停止与断开
 
-发布前运行 `npm test` 与 `DASHBOARD_ORIGIN=https://你的正式域名 npm run check:pages`，并先完成 Codex review 与问题修复。v1.0.0 的具体结果见 [验证说明](VALIDATION.md)。
+重新握手不会自动恢复真实输出。临时规则的时长为 0.1–60 秒，持久波形按 1 秒任务续发；新规则、停止或断开会取消后续轮播。两端的桥接超时为 90 秒。
+
+网络断开或标签页被强制关闭时，停止请求可能无法送达，仍需能在 App 或设备端手动停止。实际设备效果的验证范围见 [验证说明](VALIDATION.md)。

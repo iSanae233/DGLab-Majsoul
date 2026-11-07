@@ -17,7 +17,7 @@
 
 ## DG-LAB 与二维码
 
-- dglab-kit 1.0.5：https://github.com/dungeonlab-open/dglab-kit 。用于 V4 配对、设备发现、临时强度、BUBBLE 波形和任务清理；包内附 GPL-3.0 许可证。
+- dglab-kit 1.0.5：https://github.com/dungeonlab-open/dglab-kit 。用于 V4 配对、设备发现、强度控制、内置波形播放和任务清理；包内附 GPL-3.0 许可证。
 - qrcode-generator 2.0.4：https://github.com/kazuhikoarase/qrcode-generator 。用于本地生成配对二维码，MIT 许可证。
 
 开发测试使用 linkedom 0.18.15（ISC），仅用于 DOM 模拟，不打包进网页或用户脚本。
