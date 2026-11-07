@@ -62,6 +62,12 @@ test('official SDK generates V4 pairing, finite intensity/pulse tasks and scoped
   assert.ok(frames.some(frame => frame.data?.data?.t === 3 && frame.data.data.c === 1 && frame.data.data.v === 8));
   await controller.stop();
   assert.ok(frames.some(frame => frame.data?.m === 'device.op.clear' && frame.data.data.c === 1));
+  controller.selection.channel = 0;
+  const reported = sdk.getClient('app-test').getDevice('slot-test'); reported.props.intensityA = 5; reported.slotState.channelA.intensityMax = 50;
+  await controller.fire({ strategy: 'custom', maxIntensity: 30, scaleByLoss: true, loss: 3900, channels: { A: { mode: 'temporary', delta: 1, durationMs: 100, waveform: null } } });
+  const scaled = frames.filter(frame => frame.data?.data?.t === 4).at(-1).data.data;
+  assert.equal(scaled.v, 4); assert.equal(scaled.c, 0);
+  controller.selection.channel = 'both';
   delete sdk.getClient('app-test').getDevice('slot-test').props.intensityB;
   const count = frames.length;
   await assert.rejects(controller.fire(custom), /缺少 B 通道/);

@@ -1,17 +1,15 @@
 import qrcode from 'qrcode-generator';
 import { DglabController } from '../src/dglab.mjs';
-import { PenaltyEngine, penaltyFor } from '../src/penalty.mjs';
+import { PenaltyEngine } from '../src/penalty.mjs';
 import { DashboardBridge, GAME_URLS } from '../src/bridge.mjs';
 import { TRIGGERS } from '../src/triggers.mjs';
-import { recordShortcut, shortcutMatches, shortcutLabel } from '../src/shortcut.mjs';
-import { WAVEFORMS, customPlan, describePlan } from '../src/rules.mjs';
+import { ShortcutMatcher, ShortcutRecorder, shortcutLabel, validShortcut } from '../src/shortcut.mjs';
+import { RuleEditor, validDraft } from './rule-editor.mjs';
 import { dashboardMarkup } from './layout.mjs';
 
 const recent = [], operations = [];
 let total = 0, devices = [], pairGeneration = 0, scriptVersion = null;
-let editingTrigger = 'deal-in', stopShortcut = 'F7', recordingShortcut = false;
-const emptyChannel = () => ({ mode: 'temporary', delta: 0, durationMs: 5000, waveform: null });
-const eventRules = Object.fromEntries(TRIGGERS.map(trigger => [trigger.value, { enabled: false, syncChannels: true, channels: { A: emptyChannel(), B: emptyChannel() } }]));
+let stopShortcut = 'F7', recordingShortcut = false, ruleEditor;
 const ui = {};
 const labels = { 'script-ready': '脚本就绪', discard: '弃牌', riichi: '立直', meld: '吃碰杠', kan: '杠', win: '和牌', 'deal-in': '点炮结算',
   'round-start': '新一局', 'game-start': '进入对局', resync: '恢复对局', 'north-extraction': '拔北',
@@ -93,13 +91,14 @@ function mount() {
   const root = document.createElement('main'); root.className = 'console'; root.innerHTML = dashboardMarkup;
   document.body.append(root);
   root.querySelectorAll('[id]').forEach(element => { ui[element.id] = element; });
-  ui.simulation.checked = true; ui['sync-channels'].checked = true;
-  for (const select of [ui.waveform, ui['waveform-b']]) WAVEFORMS.forEach(wave => select.append(new Option(wave.label, wave.value)));
+  ui.simulation.checked = true;
   const emergencyStop = () => engine.stop().then(() => log('快捷停止：联动已暂停')).catch(error => log(error.message));
   bridge.onStop = emergencyStop;
-  window.addEventListener('keydown', event => { if (!recordingShortcut && shortcutMatches(event, stopShortcut)) { event.preventDefault(); emergencyStop(); } });
-  TRIGGERS.forEach(trigger => { const option = new Option(trigger.label, trigger.value); option.selected = trigger.value === editingTrigger; ui.trigger.append(option); });
-  ui['rule-enabled'].checked = false;
+  ui['quick-stop'].addEventListener('click', emergencyStop);
+  const matcher = new ShortcutMatcher();
+  window.addEventListener('keyup', event => matcher.keyup(event));
+  window.addEventListener('blur', () => matcher.reset());
+  window.addEventListener('keydown', event => { if (!recordingShortcut && matcher.keydown(event, stopShortcut)) { event.preventDefault(); emergencyStop(); } });
   GAME_URLS.forEach((url, i) => { const option = new Option(['繁中服', '日服', '国际服'][i], url); option.selected = i === 0; ui.server.append(option); });
   ui['open-game'].addEventListener('click', () => { try { bridge.open(ui.server.value); } catch (error) { log(error.message); } });
   ui['show-pairing'].addEventListener('click', () => { ui.pairing.hidden = !ui.pairing.hidden; });
@@ -132,77 +131,80 @@ function mount() {
       if (generation === pairGeneration) { ui.pair.disabled = false; ui.pair.textContent = '连接并生成配对二维码'; }
     }
   });
-  const readChannel = suffix => ({ mode: ui[`strength-mode${suffix}`].value,
-    delta: Number(ui[`strength-delta${suffix}`].value), durationMs: Math.round(Number(ui[`custom-seconds${suffix}`].value) * 1000),
-    waveform: ui[`waveform${suffix}`].value || null });
-  const saveDraft = () => { eventRules[editingTrigger] = { enabled: ui['rule-enabled'].checked, syncChannels: ui['sync-channels'].checked, channels: { A: readChannel(''), B: readChannel('-b') } }; };
-  const loadDraft = () => {
-    const draft = eventRules[editingTrigger];
-    ui['rule-enabled'].checked = draft.enabled; ui['sync-channels'].checked = draft.syncChannels;
-    for (const [name, suffix] of [['A', ''], ['B', '-b']]) {
-      const rule = draft.channels[name];
-      const modes = [...ui[`strength-mode${suffix}`].querySelectorAll('option')];
-      modes.forEach(option => { option.selected = false; }); modes.find(option => option.value === rule.mode).selected = true;
-      ui[`strength-delta${suffix}`].value = String(rule.delta);
-      ui[`custom-seconds${suffix}`].value = String(rule.durationMs / 1000); const waves = [...ui[`waveform${suffix}`].querySelectorAll('option')];
-      waves.forEach(option => { option.selected = false; }); waves.find(option => option.value === (rule.waveform || '')).selected = true;
-    }
-  };
-  const config = () => {
-    const common = { strategy: ui.strategy.value, maxIntensity: Number(ui.maximum.value), simulation: ui.simulation.checked };
-    if (common.strategy === 'custom') {
-      saveDraft();
-      return { ...common, targetChannel: ui.channel.value === 'both' ? 'both' : ui.channel.value === '1' ? 'B' : 'A',
-        eventRules: JSON.parse(JSON.stringify(eventRules)) };
-    }
-    if (ui.channel.value === 'both') throw new Error('按失分换算时请选择单个通道，或使用自定义 A+B 指令');
-    return { ...common, per1000: Number(ui.rate.value), durationMs: Number(ui.duration.value) };
-  };
-  const preview = () => {
-    const custom = ui.strategy.value === 'custom';
-    ui['custom-rules'].hidden = !custom; ui['linear-rules'].hidden = custom;
-    ui['channel-b-rules'].hidden = ui['sync-channels'].checked;
-    ui['strength-delta'].disabled = ui['strength-mode'].value === 'reset';
-    ui['strength-delta-b'].disabled = ui['strength-mode-b'].value === 'reset';
-    ui['preview-caption'].textContent = custom ? `${TRIGGERS.find(item => item.value === editingTrigger)?.label} · ${ui['rule-enabled'].checked ? '已启用' : '未启用'}` : '四舍五入预览 / 失分 3,900 点';
-    bridge.configureStopKey(stopShortcut);
+  const context = () => ({ maxIntensity: Number(ui.maximum.value), targetChannel: ui.channel.value === 'both' ? 'both' : ui.channel.value === '1' ? 'B' : 'A' });
+  const savePreferences = () => {
     try {
-      const current = config();
-      const result = custom ? customPlan({ ...current, ...eventRules[editingTrigger] }) : penaltyFor(3900, current);
-      ui['rule-preview'].textContent = custom ? describePlan(result) : `临时强度 ${result.intensity} · ${(result.durationMs / 1000).toLocaleString()} 秒`;
-    } catch (error) { ui['rule-preview'].textContent = error.message; }
+      window.localStorage.setItem('dglab-majsoul.rules.v1', JSON.stringify({ version: 1, ...context(), stopShortcut, eventRules: ruleEditor.snapshot() }));
+      ui['rules-save-note'].textContent = '规则仅保存在此浏览器；刷新后仍需手动启用，默认仅模拟。';
+    } catch { ui['rules-save-note'].textContent = '浏览器未允许本地保存；本次页面内的编辑仍有效。'; }
   };
-  for (const input of [ui.device, ui.channel, ui.rate, ui.maximum, ui.duration, ui.simulation, ui.strategy, ui['rule-enabled'], ui['sync-channels'],
-    ui['strength-mode'], ui['strength-mode-b'], ui['strength-delta'], ui['strength-delta-b'], ui['custom-seconds'], ui['custom-seconds-b'], ui.waveform, ui['waveform-b']]) {
-    const change = () => { if (Number(ui.maximum.value) > 200) ui.maximum.value = '200'; preview(); if (engine.enabled) engine.stop().then(() => log('设置已改变，请重新启用')).catch(() => log('请在 App 手动停止')); };
-    input.addEventListener('input', change); input.addEventListener('change', change);
+  const updateAddChoices = () => {
+    const selected = ui['new-trigger'].value;
+    const available = TRIGGERS.filter(trigger => !ruleEditor.rows.has(trigger.value));
+    ui['new-trigger'].replaceChildren();
+    available.forEach((trigger, index) => {
+      const option = new Option(trigger.label, trigger.value);
+      option.selected = available.some(item => item.value === selected) ? trigger.value === selected : index === 0;
+      ui['new-trigger'].append(option);
+    });
+    ui['new-trigger'].disabled = ui['add-rule'].disabled = available.length === 0;
+    const enabled = Object.values(ruleEditor.snapshot()).filter(rule => rule.enabled).length;
+    ui['rule-count'].textContent = `${ruleEditor.rows.size} 条 · ${enabled} 条启用`;
+  };
+  const changed = () => {
+    if (Number(ui.maximum.value) > 200) ui.maximum.value = '200';
+    ruleEditor.preview(); updateAddChoices(); bridge.configureStopKey(stopShortcut); savePreferences();
+    if (engine.enabled) engine.stop().then(() => log('规则已改变，请重新启用')).catch(() => log('请在 App 手动停止'));
+  };
+  ruleEditor = new RuleEditor(ui['rule-list'], changed, context);
+  try {
+    const text = window.localStorage.getItem('dglab-majsoul.rules.v1');
+    const saved = text && text.length < 50000 ? JSON.parse(text) : null;
+    if (saved?.version === 1) {
+      if (Number.isInteger(saved.maxIntensity) && saved.maxIntensity >= 0 && saved.maxIntensity <= 200) ui.maximum.value = String(saved.maxIntensity);
+      if (['A','B','both'].includes(saved.targetChannel)) {
+        const value = saved.targetChannel === 'A' ? '0' : saved.targetChannel === 'B' ? '1' : 'both';
+        const options = [...ui.channel.querySelectorAll('option')]; options.forEach(option => { option.selected = false; }); options.find(option => option.value === value).selected = true;
+      }
+      if (validShortcut(saved.stopShortcut)) stopShortcut = saved.stopShortcut;
+      for (const trigger of TRIGGERS) if (validDraft(saved.eventRules?.[trigger.value])) ruleEditor.add(trigger.value, saved.eventRules[trigger.value], false);
+    }
+  } catch { /* Invalid stored settings never arm or control a device. */ }
+  updateAddChoices(); ruleEditor.preview(); ui['stop-key'].value = shortcutLabel(stopShortcut); bridge.configureStopKey(stopShortcut);
+  ui['add-rule'].addEventListener('click', () => {
+    try { ruleEditor.add(ui['new-trigger'].value); } catch (error) { log(error.message); }
+  });
+  for (const input of [ui.device, ui.channel, ui.maximum, ui.simulation]) {
+    input.addEventListener('input', changed); input.addEventListener('change', changed);
   }
-  ui.trigger.addEventListener('change', () => {
-    const key = ui.trigger.value; if (!Object.hasOwn(eventRules, key)) return;
-    saveDraft(); editingTrigger = key; loadDraft(); preview();
-    if (engine.enabled) engine.stop().then(() => log('触发事件已改变，请重新启用')).catch(() => log('请在 App 手动停止'));
-  });
-  ui['stop-key'].addEventListener('focus', () => {
-    recordingShortcut = true; ui['stop-key'].value = '请按快捷键…';
+  const recorder = new ShortcutRecorder();
+  const beginRecording = () => {
+    recordingShortcut = true; recorder.reset(); matcher.reset(); ui['stop-key'].value = '同时按下组合，再松开';
     engine.stop().catch(() => log('请在 App 手动停止')); log('正在录入停止键，联动已暂停');
-  });
+  };
+  ui['stop-key'].addEventListener('focus', beginRecording);
+  ui['stop-key'].addEventListener('click', () => { if (!recordingShortcut) beginRecording(); });
+  window.addEventListener('blur', () => { recordingShortcut = false; recorder.reset(); ui['stop-key'].value = shortcutLabel(stopShortcut); });
   ui['stop-key'].addEventListener('keydown', event => {
     event.preventDefault(); event.stopPropagation();
-    try {
-      const key = recordShortcut(event); if (!key) return;
-      stopShortcut = key; recordingShortcut = false;
-      ui['stop-key'].value = shortcutLabel(key); ui['stop-key'].blur();
-      preview(); log(`停止键已设为 ${shortcutLabel(key)}`);
-    } catch (error) { ui['stop-key'].value = '请换一个按键'; log(error.message); }
+    try { const candidate = recorder.keydown(event); if (candidate) ui['stop-key'].value = `${shortcutLabel(candidate)}（松开确认）`; }
+    catch (error) { ui['stop-key'].value = '请换一个组合'; log(error.message); }
   });
-  ui['stop-key'].addEventListener('blur', () => { recordingShortcut = false; ui['stop-key'].value = shortcutLabel(stopShortcut); });
+  ui['stop-key'].addEventListener('keyup', event => {
+    event.preventDefault(); event.stopPropagation();
+    const value = recorder.keyup(event); if (!value) return;
+    stopShortcut = value; recordingShortcut = false; matcher.reset(); ui['stop-key'].value = shortcutLabel(value); ui['stop-key'].blur();
+    changed(); log(`停止键已设为 ${shortcutLabel(value)}`);
+  });
+  ui['stop-key'].addEventListener('blur', () => { recordingShortcut = false; recorder.reset(); matcher.reset(); ui['stop-key'].value = shortcutLabel(stopShortcut); });
+  const config = () => ({ strategy: 'custom', ...context(), simulation: ui.simulation.checked, eventRules: ruleEditor.snapshot() });
   ui.arm.addEventListener('click', async () => {
     ui.arm.disabled = true;
     try {
       await engine.stop();
       if (!bridge.connected) throw new Error('请先从本页打开雀魂并等待脚本连接');
-      const modern = Number(scriptVersion?.split('.')[0]) > 0 || Number(scriptVersion?.split('.')[1]) >= 6;
-      if (!modern && (config().strategy === 'custom' && Object.entries(config().eventRules).some(([key, rule]) => key !== 'deal-in' && rule.enabled) || !['F7','F8','F9','F10','Escape'].includes(stopShortcut))) throw new Error('新增事件和按键录入需要用户脚本 0.6.0，请更新并刷新雀魂');
+      const modern = Number(scriptVersion?.split('.')[0]) > 0 || Number(scriptVersion?.split('.')[1]) >= 7;
+      if (!modern) throw new Error('请更新用户脚本到 0.7.0，再刷新并关联雀魂后启用');
       const device = devices.find(item => JSON.stringify([item.clientId, item.slotId]) === ui.device.value);
       controller.selection = device ? { ...device, channel: ui.channel.value === 'both' ? 'both' : Number(ui.channel.value) } : null;
       engine.arm(config()); log(ui.simulation.checked ? '模拟已启用' : '真实输出已启用；重连或异常后需重新启用');
@@ -220,7 +222,7 @@ function mount() {
     badge('relay', '中继未连接'); ui['relay-message'].textContent = '连接已断开。';
   });
   ui.copy.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(JSON.stringify({ version: '0.6.0', total, events: recent }, null, 2)); ui.copy.textContent = '已复制'; }
+    try { await navigator.clipboard.writeText(JSON.stringify({ version: '0.7.0', total, events: recent }, null, 2)); ui.copy.textContent = '已复制'; }
     catch { ui.copy.textContent = '复制失败，请允许剪贴板访问'; }
   });
   ui.clear.addEventListener('click', () => { recent.length = 0; renderEvents(); });

@@ -52,7 +52,7 @@ export class PenaltyEngine {
     this.seen.add(key);
     if (this.seen.size > 512) this.seen.delete(this.seen.values().next().value);
     if (this.busy) { this.log('已有任务，跳过本次惩罚（不排队）'); return; }
-    const command = match.plan;
+    const command = match.plan.scaleByLoss ? { ...match.plan, loss: event.loss } : match.plan;
     const reason = event.type === 'deal-in' ? `点炮失分 ${event.loss}` : triggerLabel(match.trigger);
     if (this.config.simulation) { this.log(command.strategy === 'custom' ? `模拟：${reason}；${describePlan(command)}` : `模拟：点炮失分 ${event.loss}，临时强度 ${command.intensity}，${command.durationMs}ms`); return; }
     if (!this.transport.ready()) { this.enabled = false; this.log('设备不可用，已暂停'); return; }

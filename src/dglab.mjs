@@ -1,5 +1,5 @@
 import { DglabSocket, COYOTE_WAVEFORMS, COYOTE_WAVEFORM } from 'dglab-kit';
-import { customPlan } from './rules.mjs';
+import { customPlan, pointDelta } from './rules.mjs';
 
 export class DglabController {
   selection = null;
@@ -72,7 +72,8 @@ export class DglabController {
     if (!this.ready()) throw new Error('device-unavailable');
     const channelNames = this.selection.channel === 'both' ? ['A', 'B'] : this.selection.channel === 0 ? ['A'] : this.selection.channel === 1 ? ['B'] : [];
     if (!channelNames.length || Object.keys(plan.channels || {}).sort().join() !== channelNames.sort().join()) throw new Error('channel-mismatch');
-    plan = customPlan({ ...plan, targetChannel: channelNames.length === 2 ? 'both' : channelNames[0], syncChannels: false });
+    const loss = plan.loss;
+    plan = { ...customPlan({ ...plan, targetChannel: channelNames.length === 2 ? 'both' : channelNames[0], syncChannels: false }), loss };
     const { clientId, slotId } = this.selection;
     const device = this.sdk.getClient(clientId).getDevice(slotId);
     const prepared = channelNames.map(name => {
@@ -80,7 +81,8 @@ export class DglabController {
       const base = device.props?.[`intensity${name}`];
       const appMax = device.slotState?.[`channel${name}`]?.intensityMax;
       if (!Number.isInteger(base) || base < 0 || base > 200 || !Number.isFinite(appMax) || appMax < 0) throw new Error(`缺少 ${name} 通道强度或上限反馈`);
-      const target = rule.mode === 'reset' ? 0 : Math.max(0, Math.min(base + rule.delta, plan.maxIntensity, appMax, 200));
+      const requested = plan.scaleByLoss && rule.mode !== 'reset' ? pointDelta(rule.delta, loss) : rule.delta;
+      const target = rule.mode === 'reset' ? 0 : Math.max(0, Math.min(base + requested, plan.maxIntensity, appMax, 200));
       return { ...rule, name, channel, maxIntensity: plan.maxIntensity, delta: Math.floor(target) - base };
     });
     this.active = { clientId, slotId, channels: prepared.map(rule => rule.channel) };
