@@ -10,7 +10,7 @@ export function penaltyFor(loss, config) {
       !Number.isInteger(durationMs) || durationMs < 100 || durationMs > 10000) {
     throw new Error('请设置有效的换算、强度上限和时长（100–10000ms）');
   }
-  return { intensity: Math.min(maxIntensity, Math.round(loss / 1000 * per1000)), durationMs };
+  return { intensity: Math.min(maxIntensity, Math.round(Math.round(loss / 1000) * per1000)), durationMs };
 }
 
 export class PenaltyEngine {

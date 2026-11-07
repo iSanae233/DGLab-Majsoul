@@ -7,7 +7,7 @@ const recent = [];
 let output;
 let status;
 const operationLog = [];
-const VERSION = '0.7.1';
+const VERSION = '0.7.2';
 const bridge = new GameBridge(window, __DASHBOARD_ORIGIN__, text => {
   operationLog.push(text);
   if (operationLog.length > 5) operationLog.shift();

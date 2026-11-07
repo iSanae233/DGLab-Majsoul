@@ -1,5 +1,5 @@
 import { TRIGGERS, triggerLabel } from '../src/triggers.mjs';
-import { WAVEFORMS, STRENGTH_MODES, customPlan, pointDelta } from '../src/rules.mjs';
+import { WAVEFORMS, STRENGTH_MODES, customPlan } from '../src/rules.mjs';
 
 const channelFields = (channel, suffix) => `<fieldset class="rule-channel" data-field="panel${suffix}"><legend>${channel === 'A' ? 'A 通道 / 同步规则' : 'B 通道独立规则'}</legend><div class="two-columns">
 <label class="field">${channel === 'B' ? 'B 通道' : ''}强度操作<select data-field="mode${suffix}"><option value="temporary" selected>强度临时变化</option><option value="permanent">强度永久变化</option><option value="reset">强度临时归零</option></select></label>
@@ -37,8 +37,9 @@ export class RuleEditor {
     card.setAttribute('aria-label', triggerLabel(key));
     card.innerHTML = `<div class="event-rule-heading"><div><h3 data-field="title"></h3><span data-field="state" class="rule-state">待配置</span></div><div class="event-rule-actions"><label class="rule-enable"><input data-field="enabled" type="checkbox">启用</label><button data-field="edit" class="text-button" type="button">编辑</button><button data-field="remove" class="text-button remove-rule" type="button">删除</button></div></div>
 <p data-field="preview" class="event-rule-preview"></p>
+<label data-field="point-toggle" class="point-scale-toggle" hidden><input data-field="scale" type="checkbox">按实际点炮失分缩放强度变化</label>
 <div data-field="editor" class="event-rule-editor" hidden>
-<div data-field="point-options" class="point-options" hidden><label class="sync-label"><input data-field="scale" type="checkbox">按实际点炮失分缩放强度变化</label><p class="field-help">变化值按每 1000 点填写，最终变化四舍五入。例如系数 +1，3900 点为 +4；实际输出仍受当前强度与上限限制。归零操作不按失分增加强度。</p></div>
+<p data-field="point-help" class="field-help" hidden>先将实际失分按千点单位四舍五入，再乘以变化系数。实际输出仍受当前强度与上限限制；归零操作不按失分增加强度。</p>
 <label class="sync-label"><input data-field="sync" type="checkbox">A / B 通道使用相同规则</label>${channelFields('A','')}${channelFields('B','-b')}
 <p data-field="error" class="rule-error" role="status"></p><button data-field="done" class="secondary rule-done" type="button">完成编辑</button></div>`;
     const fields = {};
@@ -46,7 +47,8 @@ export class RuleEditor {
     fields.title.textContent = triggerLabel(key);
     const initial = saved || { enabled: true, syncChannels: true, channels: { A: emptyChannel(), B: emptyChannel() } };
     fields.enabled.checked = initial.enabled; fields.sync.checked = initial.syncChannels;
-    fields.scale.checked = key === 'deal-in' && initial.scaleByLoss !== false; fields['point-options'].hidden = key !== 'deal-in';
+    fields.scale.checked = key === 'deal-in' && initial.scaleByLoss !== false;
+    fields['point-toggle'].hidden = fields['point-help'].hidden = key !== 'deal-in';
     for (const [name, suffix] of [['A',''],['B','-b']]) {
       WAVEFORMS.forEach(wave => { const option = document.createElement('option'); option.value = wave.value; option.textContent = wave.label; fields[`waveform${suffix}`].append(option); });
       const profile = initial.channels[name];
@@ -91,7 +93,7 @@ export class RuleEditor {
       const signed = value => `${value >= 0 ? '+' : ''}${value}`;
       fields.preview.replaceChildren(...displayed.map(([name, profile]) => {
         const mode = { temporary: '临时', permanent: '永久', reset: '归零' }[profile.mode];
-        const change = profile.mode === 'reset' ? '' : rule.scaleByLoss ? ` 每千点 ${signed(profile.delta)}（3900点 ${signed(pointDelta(profile.delta,3900))}）` : ` ${signed(profile.delta)}`;
+        const change = profile.mode === 'reset' ? '' : rule.scaleByLoss ? ` 每千点 ${signed(profile.delta)}` : ` ${signed(profile.delta)}`;
         const wave = profile.waveform ? ` · ${WAVEFORMS.find(item => item.value === profile.waveform)?.label}` : '';
         const row = document.createElement('span'); row.className = 'rule-channel-summary';
         const channel = document.createElement('strong'); channel.textContent = name;

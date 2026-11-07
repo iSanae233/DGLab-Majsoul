@@ -67,6 +67,8 @@ test('official SDK generates V4 pairing, finite intensity/pulse tasks and scoped
   await controller.fire({ strategy: 'custom', maxIntensity: 30, scaleByLoss: true, loss: 3900, channels: { A: { mode: 'temporary', delta: 1, durationMs: 100, waveform: null } } });
   const scaled = frames.filter(frame => frame.data?.data?.t === 4).at(-1).data.data;
   assert.equal(scaled.v, 4); assert.equal(scaled.c, 0);
+  await controller.fire({ strategy: 'custom', maxIntensity: 30, scaleByLoss: true, loss: 1300, channels: { A: { mode: 'temporary', delta: 3, durationMs: 100, waveform: null } } });
+  assert.equal(frames.filter(frame => frame.data?.data?.t === 4).at(-1).data.data.v, 3, '1300 points becomes one unit before multiplying by 3');
   controller.selection.channel = 'both';
   delete sdk.getClient('app-test').getDevice('slot-test').props.intensityB;
   const count = frames.length;

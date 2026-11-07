@@ -112,3 +112,16 @@ test('compact summaries show different A/B profiles on two rows regardless of ou
   rows = card.querySelectorAll('.rule-channel-summary');
   assert.equal(rows.length, 1); assert.equal(rows[0].querySelector('strong').textContent, 'A/B');
 });
+
+test('deal-in scaling checkbox stays visible in the compact rule without example numbers', () => {
+  const { document, event, add } = dashboard();
+  const card = add('deal-in');
+  card.querySelector('[data-field=delta]').value = '9'; event(card.querySelector('[data-field=delta]'), 'input');
+  event(card.querySelector('[data-field=done]'), 'click');
+  assert.equal(card.querySelector('[data-field=editor]').hidden, true);
+  assert.equal(card.querySelector('[data-field=point-toggle]').hidden, false);
+  assert.equal(card.querySelector('[data-field=scale]').checked, true);
+  assert.equal(card.querySelector('[data-field=point-toggle]').closest('[data-field=editor]'), null);
+  assert.match(card.querySelector('[data-field=preview]').textContent, /每千点 \+9/);
+  assert.doesNotMatch(card.querySelector('[data-field=preview]').textContent, /3900|（/);
+});

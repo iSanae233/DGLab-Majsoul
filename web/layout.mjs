@@ -32,4 +32,4 @@ export const dashboardMarkup = `
 <ol id="event-list" class="event-list"><li class="empty-state"><span class="empty-glyph" aria-hidden="true">東</span><strong>等待第一条牌局事件</strong><p>连接脚本后，弃牌、和牌和点炮结算会显示在这里。</p></li></ol>
 <button id="copy" class="secondary full-width">复制最近 100 条事件</button>
 </section><div class="usage-note"><strong>使用提示</strong><p>默认模拟，刷新后需重新启用。网络断开时，应能在 App 或设备端手动停止。</p><p>真实设备输出效果仍需实测。</p></div></aside></div>
-<footer><span>DGLab-Majsoul <span class="muted">/ v0.7.1</span></span><span>连接 · 配置 · 开始游戏</span></footer>`;
+<footer><span>DGLab-Majsoul <span class="muted">/ v0.7.2</span></span><span>连接 · 配置 · 开始游戏</span></footer>`;

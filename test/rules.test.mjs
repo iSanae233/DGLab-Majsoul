@@ -28,9 +28,10 @@ test('custom plans still require explicit arming and simulation never controls a
   assert.equal(calls, 0); assert.match(messages[0], /模拟.*A 通道.*强度临时变化/);
 });
 
-test('point-size rules scale actual loss with symmetric rounding', async () => {
+test('point-size rules round point units before multiplying the rate', async () => {
   assert.equal(pointDelta(1,3900), 4); assert.equal(pointDelta(1,12000), 12);
   assert.equal(pointDelta(-1,3500), -4); assert.equal(pointDelta(1,100), 0);
+  assert.equal(pointDelta(9,3900), 36); assert.equal(pointDelta(3,1300), 3); assert.equal(pointDelta(2,3400), 6);
   const logs = [];
   const engine = new PenaltyEngine({ ready: () => true, stop: async () => {}, fire: async () => assert.fail('simulation') }, message => logs.push(message));
   engine.arm({ strategy: 'custom', simulation: true, targetChannel: 'A', maxIntensity: 30, eventRules: {
@@ -38,5 +39,5 @@ test('point-size rules scale actual loss with symmetric rounding', async () => {
   } });
   await engine.handle({ type: 'deal-in', connection: 1, round: '0:0:0', step: 1, loss: 3900 });
   await engine.handle({ type: 'deal-in', connection: 1, round: '0:0:1', step: 1, loss: 12000 });
-  assert.match(logs[0], /\+4.*3900/); assert.match(logs[1], /\+12.*12000/);
+  assert.match(logs[0], /3900.*\+4/); assert.match(logs[1], /12000.*\+12/);
 });

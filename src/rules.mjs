@@ -4,8 +4,8 @@ export const WAVEFORMS = Object.entries(COYOTE_WAVEFORMS).map(([value, wave]) =>
 export const STRENGTH_MODES = { temporary: '强度临时变化', permanent: '强度永久变化', reset: '强度临时归零' };
 export function pointDelta(delta, loss) {
   if (!Number.isFinite(delta) || !Number.isSafeInteger(loss) || loss <= 0 || loss > 10000000) throw new Error('点炮失分或变化系数无效');
-  const magnitude = Math.round(Math.abs(loss / 1000 * delta));
-  return magnitude === 0 ? 0 : Math.sign(delta) * magnitude;
+  const result = Math.round(loss / 1000) * delta;
+  return result === 0 ? 0 : result;
 }
 export function customPlan(config) {
   if (!Number.isInteger(config.maxIntensity) || config.maxIntensity < 1 || config.maxIntensity > 200) throw new Error('请设置 1–200 的强度上限');
@@ -29,7 +29,7 @@ export function describePlan(plan) {
   return Object.entries(plan.channels).map(([channel, rule]) => {
     const scaled = plan.scaleByLoss && rule.mode !== 'reset' && plan.loss;
     const delta = scaled ? pointDelta(rule.delta, plan.loss) : rule.delta;
-    return `${channel} 通道：${STRENGTH_MODES[rule.mode]}${rule.mode === 'reset' ? '' : ` ${delta >= 0 ? '+' : ''}${delta}${scaled ? `（按 ${plan.loss} 点）` : plan.scaleByLoss ? ' / 每千点' : ''}`}，${rule.durationMs / 1000} 秒${rule.waveform ? `，波形 ${WAVEFORMS.find(w => w.value === rule.waveform)?.label}` : '，保持 App 波形'}`;
+    return `${channel} 通道：${STRENGTH_MODES[rule.mode]}${rule.mode === 'reset' ? '' : ` ${delta >= 0 ? '+' : ''}${delta}${plan.scaleByLoss && !scaled ? ' / 每千点' : ''}`}，${rule.durationMs / 1000} 秒${rule.waveform ? `，波形 ${WAVEFORMS.find(w => w.value === rule.waveform)?.label}` : '，保持 App 波形'}`;
   }).join('；');
 }
 export function customEventPlans(config) {

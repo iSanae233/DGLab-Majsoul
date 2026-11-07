@@ -5,10 +5,10 @@ import { penaltyFor, PenaltyEngine } from '../src/penalty.mjs';
 const config = { per1000: 2, maxIntensity: 30, durationMs: 5000, simulation: false };
 const event = { type: 'deal-in', connection: 1, round: '0:0:0', step: 10, loss: 8300 };
 test('linear intensity, fixed duration and ceiling are enforced; invalid values rejected', () => {
-  assert.deepEqual(penaltyFor(8300, config), { intensity: 17, durationMs: 5000 });
+  assert.deepEqual(penaltyFor(8300, config), { intensity: 16, durationMs: 5000 });
   assert.equal(penaltyFor(48000, config).intensity, 30);
   assert.equal(penaltyFor(3900, { ...config, per1000: 1 }).intensity, 4);
-  assert.equal(penaltyFor(3400, config).intensity, 7, 'round final intensity rather than rounding points first');
+  assert.equal(penaltyFor(3400, config).intensity, 6, 'round point units before multiplying');
   assert.equal(penaltyFor(3500, { ...config, per1000: 1 }).intensity, 4);
   assert.equal(penaltyFor(100, { ...config, per1000: 0.1 }).intensity, 0);
   for (const loss of [0, -1, NaN, Infinity]) assert.throws(() => penaltyFor(loss, config));
