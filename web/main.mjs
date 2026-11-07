@@ -1,125 +1,143 @@
 import qrcode from 'qrcode-generator';
 import { DglabController } from '../src/dglab.mjs';
-import { PenaltyEngine } from '../src/penalty.mjs';
+import { PenaltyEngine, penaltyFor } from '../src/penalty.mjs';
 import { DashboardBridge, GAME_URLS } from '../src/bridge.mjs';
+import { dashboardMarkup } from './layout.mjs';
 
-const recent = [];
-let output;
-let total = 0;
-let status;
-let deviceSelect;
-let devices = [];
-const log = message => { if (status) status.textContent = message; bridge.status(message); };
+const recent = [], operations = [];
+let total = 0, devices = [], pairGeneration = 0;
+const ui = {};
+const labels = { discard: '弃牌', riichi: '立直', meld: '吃碰杠', kan: '杠', win: '和牌', 'deal-in': '点炮结算',
+  'round-start': '新一局', 'game-start': '进入对局', resync: '恢复对局', 'north-extraction': '拔北',
+  'exhaustive-draw': '荒牌流局', 'abortive-draw': '途中流局', 'game-end': '对局结束',
+  'connection-observed': '发现游戏连接', 'connection-closed': '游戏连接关闭', 'capture-error': '解析异常', 'protocol-error': '协议异常' };
+const badge = (kind, text, active = false) => {
+  if (!ui[`${kind}-state`]) return;
+  ui[`${kind}-state`].textContent = text;
+  ui[`${kind}-dot`].dataset.active = String(active);
+};
+function renderEvents() {
+  if (!ui['event-list']) return;
+  ui['event-count'].textContent = String(total);
+  if (!recent.length) {
+    ui['event-list'].replaceChildren();
+    const item = document.createElement('li'); item.className = 'empty-state';
+    item.textContent = '等待第一条牌局事件'; ui['event-list'].append(item); return;
+  }
+  ui['event-list'].replaceChildren(...recent.slice(-12).reverse().map(event => {
+    const item = document.createElement('li'); item.className = 'event-row';
+    const time = document.createElement('time'); time.textContent = new Date(event.time).toLocaleTimeString('zh-CN', { hour12: false });
+    const title = document.createElement('strong'); title.textContent = labels[event.type] || event.type;
+    const detail = document.createElement('span'); detail.textContent = event.loss ? `实际失分 ${event.loss.toLocaleString()} 点` :
+      event.tile ? `座位 ${event.seat} · ${event.tile}` : event.round ? `局标识 ${event.round}` : `连接 ${String(event.connection).split(':').at(-1)}`;
+    item.append(time, title, detail); return item;
+  }));
+}
+const log = message => {
+  if (ui['operation-status']) ui['operation-status'].textContent = message;
+  operations.push({ time: new Date().toLocaleTimeString('zh-CN', { hour12: false }), message });
+  if (operations.length > 5) operations.shift();
+  if (ui['operation-list']) ui['operation-list'].replaceChildren(...operations.slice().reverse().map(operation => {
+    const item = document.createElement('li'), time = document.createElement('time'), text = document.createElement('span');
+    time.textContent = operation.time; text.textContent = operation.message; item.append(time, text); return item;
+  }));
+  badge('mode', engine.enabled ? (engine.config.simulation ? '模拟模式 · 已启用' : '真实输出 · 已启用') : '联动未启用', engine.enabled);
+  bridge.status(message);
+};
+const clearPairing = () => {
+  if (!ui.pairing) return;
+  ui.pairing.hidden = ui['qr-image'].hidden = ui['pair-link'].hidden = true;
+  ui['pair-link'].value = ''; ui['qr-image'].removeAttribute('src');
+};
 const controller = new DglabController(list => {
   devices = list;
-  if (!deviceSelect) return;
-  deviceSelect.replaceChildren(new Option('选择设备', ''));
-  list.forEach((device, i) => deviceSelect.append(new Option(`${device.name} (${i + 1})`, String(i))));
-}, () => { engine.stop().catch(() => log('连接中断；请在 App 确认停止')); log('连接已断开或设备不可用，请重新启用'); });
+  if (!ui.device) return;
+  const selected = ui.device.value;
+  ui.device.replaceChildren(new Option(list.length ? '选择设备' : '等待 App 接入', ''));
+  list.forEach(device => ui.device.append(new Option(device.name, JSON.stringify([device.clientId, device.slotId]))));
+  if (list.some(device => JSON.stringify([device.clientId, device.slotId]) === selected)) ui.device.value = selected;
+  if (list.length) badge('relay', `已发现 ${list.length} 台设备`, true);
+}, () => {
+  clearPairing(); badge('relay', '中继或设备已断开');
+  engine.stop().catch(() => log('连接中断；请在 App 确认停止'));
+  log('连接已断开或设备不可用，请重新启用');
+});
 const engine = new PenaltyEngine(controller, log);
 const bridge = new DashboardBridge(window, event => {
   const record = { time: new Date().toISOString(), ...event };
-  total++;
-  recent.push(record);
-  if (recent.length > 100) recent.shift();
-  if (output) output.textContent = recent.slice(-12).map(item => JSON.stringify(item)).join('\n');
+  total++; recent.push(record); if (recent.length > 100) recent.shift(); renderEvents();
   engine.handle(record).catch(() => log('停止未确认，请在 App 手动停止'));
 }, message => {
+  if (ui['connection-status']) ui['connection-status'].textContent = message;
   engine.stop().then(() => log(message)).catch(() => log('停止未确认，请在 App 手动停止'));
-  if (connectionStatus) connectionStatus.textContent = message;
 });
-let connectionStatus;
-const heartbeat = setInterval(() => bridge.tick(), 3000);
-
+const heartbeat = setInterval(() => {
+  bridge.tick(); badge('game', bridge.connected ? '雀魂脚本已连接' : '雀魂未连接', bridge.connected);
+}, 3000);
 function mount() {
-  const host = document.createElement('div');
-  host.className = 'console';
-  const shadow = host;
-  const details = document.createElement('section'); details.className = 'panel';
-
-  const summary = document.createElement('h1');
-  summary.textContent = 'DGLab-Majsoul 控制台';
-  const note = document.createElement('p');
-  note.textContent = '默认模拟。按结算失分换算临时强度，任务结束临时强度归零。真实设备输出尚待验证。';
-  connectionStatus = document.createElement('p'); connectionStatus.textContent = '请从这里打开雀魂以建立连接';
-  const server = document.createElement('select'); server.setAttribute('aria-label', '雀魂服务器');
-  GAME_URLS.forEach((url, index) => server.append(new Option(['繁中服', '日服', '国际服'][index], url)));
-  const openGame = document.createElement('button'); openGame.textContent = '打开雀魂并连接脚本';
-  openGame.addEventListener('click', () => { try { bridge.open(server.value); } catch (error) { log(error.message); } });
-  const download = document.createElement('a'); download.href = '/userscripts/dglab-majsoul.user.js'; download.textContent = '安装 / 更新 Tampermonkey 脚本';
-  output = document.createElement('pre');
-  output.style.cssText = 'max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-all';
-  output.textContent = recent.slice(-12).map(item => JSON.stringify(item)).join('\n') || '等待牌局 WebSocket…';
-  const copy = document.createElement('button');
-  copy.textContent = '复制最近 100 条事件';
-  copy.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(JSON.stringify({ version: '0.3.0', total, events: recent }, null, 2));
-      copy.textContent = '已复制';
-    } catch { copy.textContent = '复制失败，请允许剪贴板访问'; }
-  });
-  status = document.createElement('p'); status.textContent = '未启用';
-  const address = document.createElement('input'); address.value = 'wss://trex.dungeon-lab.cn/v4';
-  address.setAttribute('aria-label', 'V4 中继地址'); address.style.width = '100%';
-  const pair = document.createElement('button'); pair.textContent = '连接并生成配对二维码';
-  const qrImage = document.createElement('img'); qrImage.alt = 'App 配对二维码'; qrImage.hidden = true;
-  const pairText = document.createElement('textarea'); pairText.readOnly = true; pairText.hidden = true;
-  pairText.setAttribute('aria-label', '配对链接（勿公开）'); pairText.style.width = '100%';
-  pair.addEventListener('click', async () => {
-    pair.disabled = true;
+  const root = document.createElement('main'); root.className = 'console'; root.innerHTML = dashboardMarkup;
+  document.body.append(root);
+  root.querySelectorAll('[id]').forEach(element => { ui[element.id] = element; });
+  ui.simulation.checked = true;
+  GAME_URLS.forEach((url, i) => ui.server.append(new Option(['繁中服', '日服', '国际服'][i], url)));
+  ui['open-game'].addEventListener('click', () => { try { bridge.open(ui.server.value); } catch (error) { log(error.message); } });
+  ui.pair.addEventListener('click', async () => {
+    const generation = ++pairGeneration;
+    clearPairing(); ui.pair.disabled = true; ui.pair.textContent = '正在连接…';
+    ui['relay-message'].textContent = '正在与 V4 中继建立连接…'; badge('relay', '中继连接中');
     try {
       await engine.stop();
-      const link = await controller.connect(address.value);
+      const link = await controller.connect(ui['relay-address'].value);
+      if (generation !== pairGeneration) return;
       const qr = qrcode(0, 'M'); qr.addData(link); qr.make();
-      qrImage.src = qr.createDataURL(3); qrImage.hidden = false;
-      pairText.value = link; pairText.hidden = false;
-      log('使用 DG-LAB 4 App 扫码，然后选择设备');
-    } catch { log('配对失败，请检查中继连接'); }
-    finally { pair.disabled = false; }
+      ui['qr-image'].src = qr.createDataURL(3); ui['pair-link'].value = link;
+      ui.pairing.hidden = ui['qr-image'].hidden = ui['pair-link'].hidden = false;
+      ui['relay-message'].textContent = '中继已连接，等待 App 扫码。'; badge('relay', '等待 App 配对', true);
+      log('请使用 DG-LAB 4 App 扫码，然后选择设备');
+    } catch {
+      if (generation !== pairGeneration) return;
+      clearPairing(); badge('relay', '中继连接失败');
+      ui['relay-message'].textContent = '无法连接 V4 中继。请确认服务可用、地址正确，并允许浏览器访问。';
+      log('配对失败，未启用输出');
+    } finally {
+      if (generation === pairGeneration) { ui.pair.disabled = false; ui.pair.textContent = '连接并生成配对二维码'; }
+    }
   });
-  deviceSelect = document.createElement('select'); deviceSelect.append(new Option('选择设备', ''));
-  deviceSelect.setAttribute('aria-label', '目标设备');
-  const channel = document.createElement('select'); channel.append(new Option('A 通道', '0')); channel.append(new Option('B 通道', '1'));
-  const numberInput = (label, value, min, max, step = '1') => {
-    const wrapper = document.createElement('label'); wrapper.textContent = label;
-    const input = document.createElement('input'); input.type = 'number'; input.value = value;
-    input.min = min; input.max = max; input.step = step; input.style.width = '65px';
-    wrapper.append(input); return [wrapper, input];
+  const config = () => ({ per1000: Number(ui.rate.value), maxIntensity: Number(ui.maximum.value), durationMs: Number(ui.duration.value), simulation: ui.simulation.checked });
+  const preview = () => {
+    try { const result = penaltyFor(8000, config()); ui['rule-preview'].textContent = `临时强度 ${result.intensity} · ${(result.durationMs / 1000).toLocaleString()} 秒`; }
+    catch { ui['rule-preview'].textContent = '请先设置有效的换算系数、上限和时长'; }
   };
-  const [rateLabel, rate] = numberInput('每 1000 点强度 ', '0', '0', '200', '0.1');
-  const [maxLabel, max] = numberInput('强度上限 ', '0', '0', '200');
-  const [durationLabel, duration] = numberInput('固定时长 ms ', '5000', '100', '10000');
-  const simulationLabel = document.createElement('label'); simulationLabel.textContent = '仅模拟（不发送指令）';
-  const simulation = document.createElement('input'); simulation.type = 'checkbox'; simulation.checked = true;
-  simulationLabel.prepend(simulation);
-  const arm = document.createElement('button'); arm.textContent = '应用设置并启用';
-  arm.addEventListener('click', async () => {
+  for (const input of [ui.device, ui.channel, ui.rate, ui.maximum, ui.duration, ui.simulation]) {
+    input.addEventListener('input', () => { preview(); if (engine.enabled) engine.stop().then(() => log('设置已改变，请重新启用')).catch(() => log('请在 App 手动停止')); });
+    input.addEventListener('change', preview);
+  }
+  ui.arm.addEventListener('click', async () => {
+    ui.arm.disabled = true;
     try {
       await engine.stop();
       if (!bridge.connected) throw new Error('请先从本页打开雀魂并等待脚本连接');
-      const device = deviceSelect.value === '' ? null : devices[Number(deviceSelect.value)];
-      controller.selection = device ? { ...device, channel: Number(channel.value) } : null;
-      engine.arm({ per1000: Number(rate.value), maxIntensity: Number(max.value), durationMs: Number(duration.value), simulation: simulation.checked });
-      log(simulation.checked ? '模拟已启用' : '真实输出已启用；重连或异常后需重新启用');
+      const device = devices.find(item => JSON.stringify([item.clientId, item.slotId]) === ui.device.value);
+      controller.selection = device ? { ...device, channel: Number(ui.channel.value) } : null;
+      engine.arm(config()); log(ui.simulation.checked ? '模拟已启用' : '真实输出已启用；重连或异常后需重新启用');
     } catch (error) { log(error.message); }
+    finally { ui.arm.disabled = false; }
   });
-  for (const input of [deviceSelect, channel, rate, max, duration, simulation]) {
-    input.addEventListener('change', () => { engine.stop().then(() => log('设置已改变，请重新启用')).catch(() => log('请在 App 手动停止')); });
-  }
-  const stop = document.createElement('button'); stop.textContent = '停止联动并归零'; stop.style.color = '#b00020';
-  stop.addEventListener('click', () => engine.stop().then(() => log('已暂停，停止指令已确认')).catch(error => log(error.message)));
-  const disconnect = document.createElement('button'); disconnect.textContent = '断开 App';
-  disconnect.addEventListener('click', async () => {
+  ui.stop.addEventListener('click', () => {
+    const active = !!controller.active;
+    engine.stop().then(() => log(active ? '停止指令已确认，联动已暂停' : '联动已暂停')).catch(error => log(error.message));
+  });
+  ui.disconnect.addEventListener('click', async () => {
+    pairGeneration++; clearPairing(); ui.pair.disabled = false; ui.pair.textContent = '连接并生成配对二维码';
     engine.enabled = false;
-    try { await controller.disconnect(); log('已断开'); } catch { log('停止未确认，请在 App 手动停止'); }
-    qrImage.hidden = pairText.hidden = true; pairText.value = '';
+    try { await controller.disconnect(); log('已断开 App'); } catch { log('停止未确认，请在 App 手动停止'); }
+    badge('relay', '中继未连接'); ui['relay-message'].textContent = '连接已断开。';
   });
-  window.addEventListener('pagehide', () => { clearInterval(heartbeat); bridge.destroy(); engine.enabled = false; controller.disconnect().catch(() => {}); });
-
-  details.append(summary, note, download, connectionStatus, server, openGame, status, address, pair, qrImage, pairText, deviceSelect, channel,
-    rateLabel, maxLabel, durationLabel, simulationLabel, arm, stop, disconnect, output, copy);
-  shadow.append(details);
-  document.body.append(host);
+  ui.copy.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(JSON.stringify({ version: '0.4.0', total, events: recent }, null, 2)); ui.copy.textContent = '已复制'; }
+    catch { ui.copy.textContent = '复制失败，请允许剪贴板访问'; }
+  });
+  ui.clear.addEventListener('click', () => { recent.length = 0; renderEvents(); });
+  window.addEventListener('pagehide', () => { pairGeneration++; clearInterval(heartbeat); bridge.destroy(); engine.enabled = false; controller.disconnect().catch(() => {}); });
 }
-if (document.body) mount();
-else document.addEventListener('DOMContentLoaded', mount, { once: true });
+if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount, { once: true });

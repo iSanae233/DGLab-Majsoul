@@ -1,0 +1,15 @@
+name = "dglab-majsoul-relay"
+main = "worker.mjs"
+compatibility_date = "2026-11-07"
+workers_dev = false
+
+[vars]
+DASHBOARD_ORIGIN = "https://dglab-majsoul.pages.dev"
+
+[[durable_objects.bindings]]
+name = "RELAY_SESSIONS"
+class_name = "RelaySession"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RelaySession"]

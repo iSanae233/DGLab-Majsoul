@@ -23,5 +23,5 @@ await build({ ...common, entryPoints: ['src/index.mjs'], format: 'iife', outfile
   define: { __DASHBOARD_ORIGIN__: JSON.stringify(origin) }, banner: { js: header } });
 await cp('dist/dglab-majsoul.user.js', 'dist/site/userscripts/dglab-majsoul.user.js');
 await build({ ...common, entryPoints: ['web/main.mjs'], format: 'esm', outfile: 'dist/site/app.js' });
-for (const file of ['index.html', 'style.css', '_headers']) await cp(`web/${file}`, `dist/site/${file}`);
+for (const file of ['index.html', 'style.css', '_headers', '_routes.json']) await cp(`web/${file}`, `dist/site/${file}`);
 console.log(`Built ${version}; trusted dashboard: ${origin}; Pages output: dist/site`);

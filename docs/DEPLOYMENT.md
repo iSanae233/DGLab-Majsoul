@@ -1,6 +1,6 @@
 # Cloudflare Pages 部署
 
-这是纯静态控制台，无 Pages Functions、数据库或服务端设备凭据。浏览器直接连接用户选择的 V4 WSS 中继。Cloudflare Pages 不承担 WebSocket 中继。
+控制台由 Pages 托管。0.4.0 在根路径增加 WebSocket Function，通过外部 Worker 的 Durable Object 管理 V4 会话；普通 HTTPS 请求仍提供静态控制台。服务端不保存设备输出历史或配对凭据数据库。
 
 ## 本地
 
@@ -23,7 +23,7 @@ npm run dev
 | Environment variable | `DASHBOARD_ORIGIN=https://你的正式域名` |
 | Node version | 22（仓库 `.node-version`） |
 
-`wrangler.toml` 也声明了输出目录。GitHub 仓库为 `iSanae233/DGLab-Majsoul`；当前尚未部署 Pages 项目。
+`wrangler.toml` 也声明了输出目录。GitHub 仓库为 `iSanae233/DGLab-Majsoul`；Pages 项目已部署，正式地址为 https://dglab-majsoul.pages.dev 。
 
 本项目实际 Pages 域名为 `https://dglab-majsoul.pages.dev`，已在 `wrangler.toml` 的 `[vars]` 中配置 `DASHBOARD_ORIGIN`。Pages 读取 Wrangler 配置时，应以仓库中的变量为准；首次部署实测发现只在创建界面填写变量，构建仍可能报告没有变量。更换域名时同步修改此配置，并重新构建、部署和安装脚本。
 
@@ -46,6 +46,28 @@ DASHBOARD_ORIGIN=https://你的正式域名 npm run build
 将完整 `dist/site` 作为静态产物部署。Cloudflare Pages 自动构建环境若没有设置此变量，构建会明确失败，避免发布仍信任本地地址的脚本。
 
 官方参考：[构建配置](https://developers.cloudflare.com/pages/configuration/build-configuration/)、[静态响应头](https://developers.cloudflare.com/pages/configuration/headers/)。
+
+## 独立中继部署（0.4.0）
+
+需要先部署 `dglab-majsoul-relay` Worker，再部署 Pages。Pages 无法在自身项目内定义 Durable Object 类，因此 `RelaySession` 在独立 Worker 中定义并通过 `script_name` 绑定。
+
+中继 Worker 的 Git 构建设置：
+
+| 设置 | 值 |
+| --- | --- |
+| Repository | iSanae233/DGLab-Majsoul |
+| Worker name | dglab-majsoul-relay |
+| Build command | `node --version`（不执行前端的 Pages 构建） |
+| Deploy command | `npx wrangler deploy --config relay/wrangler.toml` |
+| Preview builds | 关闭，避免预览版本改变配对会话 |
+
+`relay/wrangler.toml` 包含 SQLite Durable Object 的首次迁移；`workers_dev=false`，通过 Pages 的绑定访问。已有 CLI 授权时也可运行 `npm run deploy:relay`。
+
+Pages 的 `wrangler.toml` 将 `RELAY_SESSIONS` 绑定到这个 Worker。默认地址为 `wss://dglab-majsoul.pages.dev`，App 配对地址为同一地址加 `?tid=<控制方ID>`。不依赖官方中继代转；自建中继只转发 V4 外层消息，不生成或修改设备指令。
+
+控制方连接检查精确 `Origin`，App 连接使用随机 UUID 配对 ID；配对 ID 是访问会话的能力凭据，不应公开。每会话最多 8 个 App，文本帧上限 64KiB，无 App 时 5 分钟关闭控制连接。不同会话由不同 Durable Object 隔离；未知目标客户端不能跨会话转发。
+
+本地验收：`npm run check:relay` 使用 Cloudflare 本地运行时，覆盖 Pages 路由、配对、双向 V4 消息、心跳、断开和会话隔离，不控制真实设备。SQLite Durable Objects 支持 Cloudflare Free 方案，但配额和实际费用以账号设置及 Cloudflare 官方价格为准；部署不包含升级付费方案。
 
 ## 本地 Pages 验收
 

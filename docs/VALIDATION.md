@@ -48,3 +48,12 @@
 - 临时 Pages 服务在验收结束后关闭。原工作目录最终恢复本地开发构建。
 
 环境为 macOS arm64 + Node 22，并非 Cloudflare 的完整 Linux 构建镜像。未修改云端项目或触发部署；检查域名为保留域名，不代表真实站点。0.3.0 的真实浏览器桥接和设备输出仍未验收。
+
+## 0.4.0 前端与独立中继
+
+- 默认地址改为 wss://dglab-majsoul.pages.dev 。改动前浏览器实测此地址连接失败；原部署没有 WebSocket 服务端。
+- 新界面分为设备连接、点炮规则、游戏接入和实时记录；增加状态条、实时换算预览和移动端布局。默认仍为模拟、零强度和停用。
+- 修复设备更新重置选择、旧连接回调覆盖新连接、配对失败/断开后残留旧二维码的问题。
+- 新增 Pages 根路径 WebSocket Function 和独立 Worker/SQLite Durable Object。普通 HTTPS 请求保留静态内容；中继不处理游戏数据和设备指令内容。
+- 27 项测试通过；check:relay 使用本地 Cloudflare 运行时验证配对、双向消息、心跳、断开通知、Origin 检查和会话隔离。Wrangler relay deploy dry-run 通过；Pages 静态资源与响应头验收通过。
+- 新界面已在本地 Chrome 查看。真实 App/主机输出仍待验收；不得把模拟 App 响应视为硬件验证。

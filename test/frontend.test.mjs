@@ -24,4 +24,13 @@ test('dashboard mounts defaults and cannot arm without the game bridge', async (
   await new Promise(resolve => setImmediate(resolve));
   assert.ok(document.body.textContent.includes('请先从本页打开雀魂并等待脚本连接'));
   assert.equal(document.querySelector('img').hidden, true);
+  assert.equal(document.querySelector('#relay-address').value, 'wss://dglab-majsoul.pages.dev');
+  assert.equal(document.querySelectorAll('.card').length, 4);
+  document.querySelector('#rate').value = '2';
+  document.querySelector('#maximum').value = '30';
+  document.querySelector('#rate').dispatchEvent(new domWindow.Event('input'));
+  assert.equal(document.querySelector('#rule-preview').textContent, '临时强度 16 · 5 秒');
+  document.querySelector('#stop').dispatchEvent(new domWindow.Event('click'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(document.querySelector('#operation-status').textContent, '联动已暂停');
 });

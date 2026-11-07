@@ -4,3 +4,8 @@ compatibility_date = "2026-11-07"
 
 [vars]
 DASHBOARD_ORIGIN = "https://dglab-majsoul.pages.dev"
+
+[[durable_objects.bindings]]
+name = "RELAY_SESSIONS"
+class_name = "RelaySession"
+script_name = "dglab-majsoul-relay"

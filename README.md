@@ -2,7 +2,7 @@
 
 雀魂网页版的点炮联动：Cloudflare Pages 控制台负责配对 DG-LAB App 4、设置规则和执行惩罚；Tampermonkey 脚本负责采集牌局事件，并在雀魂右上角的可展开窗口显示事件和操作结果。
 
-当前为 0.3.0 开发版。代码与模拟测试已完成，真实 App/主机联动及生产 Pages 部署尚未验收。默认模拟、停用，换算系数和强度上限为 0。
+当前为 0.4.0 开发版。0.3.0 已成功部署至 Pages，0.4.0 新增独立中继与新版界面；真实 App/主机输出仍待实测。默认模拟、停用，换算系数和强度上限为 0。
 
 ## 运行与部署
 
@@ -70,7 +70,9 @@ Cloudflare Pages 构建命令为 `npm run build`，输出目录为 `dist/site`�
 雀魂小窗口 ← 操作文字 ← 惩罚规则 → V4 WSS 中继 → DG-LAB App → 主机
 ```
 
-Cloudflare Pages 只托管静态文件，不承担 WSS 中继。控制台使用官方中继或用户指定的兼容 WSS 服务。
+默认中继为 `wss://dglab-majsoul.pages.dev`。Pages 根路径通过 Function 将 WebSocket 连接交给独立 Worker 的 Durable Object，实现 V4 配对和双向消息转发。HTTPS 根路径继续提供控制台。也可以手动填写其他兼容的 V4 WSS 地址。
+
+部署顺序：先用 `relay/wrangler.toml` 部署 `dglab-majsoul-relay` Worker，再部署 Pages；Pages 配置通过 `script_name` 绑定这个 Worker 中的 `RelaySession`。本地协议验收：`npm run check:relay`。
 
 用户脚本只信任构建时的精确控制台来源，不信任所有 `*.pages.dev`，不从 URL 接收任意可信来源。换域名后须重建并更新脚本。桥接检查来源、窗口引用、随机会话、实例和消息序号；过期点炮事件不执行。详见 [信任边界](docs/DEPLOYMENT.md#通信边界)。
 

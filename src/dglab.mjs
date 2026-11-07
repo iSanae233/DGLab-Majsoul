@@ -14,19 +14,28 @@ export class DglabController {
     if (url.protocol !== 'wss:' || url.username || url.password || url.search || url.hash) throw new Error('请填写不含查询参数的 wss:// 中继地址');
     await this.disconnect();
     const sdk = this.sdk = this.create(url.href);
+    const current = handler => (...args) => { if (this.sdk === sdk) handler(...args); };
     const update = () => {
       if (this.selection && !this.ready()) { this.onDisconnected(); this.selection = null; }
       this.onDevices(sdk.clients.flatMap(client => client.devices
       .filter(device => device.type === 'COYOTE_030' && device.slotState?.hasDevice !== false)
       .map(device => ({ clientId: client.clientId, slotId: device.slotId, name: device.name }))));
     };
-    sdk.on('devices', update);
-    sdk.on('device', update);
-    sdk.on('client-attached', clientId => { sdk.requestDevices(clientId).catch(() => this.onDisconnected()); });
-    sdk.on('client-disconnected', () => { this.selection = null; update(); this.onDisconnected(); });
-    sdk.on('close', () => { this.selection = null; this.onDevices([]); this.onDisconnected(); });
-    sdk.on('error', () => this.onDisconnected());
-    const { targetId } = await sdk.connect();
+    sdk.on('devices', current(update));
+    sdk.on('device', current(update));
+    sdk.on('client-attached', current(clientId => { sdk.requestDevices(clientId).catch(current(() => this.onDisconnected())); }));
+    sdk.on('client-disconnected', current(() => { this.selection = null; update(); this.onDisconnected(); }));
+    sdk.on('close', current(() => { this.selection = null; this.onDevices([]); this.onDisconnected(); }));
+    sdk.on('error', current(() => this.onDisconnected()));
+    let targetId;
+    try {
+      ({ targetId } = await sdk.connect());
+      if (this.sdk !== sdk) throw new Error('connection-cancelled');
+    } catch (error) {
+      if (this.sdk === sdk) this.sdk = null;
+      sdk.destroy();
+      throw error;
+    }
     url.searchParams.set('tid', targetId);
     return `https://dungeon-lab.cn/s/?v=1&action=socket&url=${encodeURIComponent(url.href)}`;
   }
@@ -65,6 +74,9 @@ export class DglabController {
   }
   async disconnect() {
     try { await this.stop(); }
-    finally { this.sdk?.destroy(); this.sdk = null; this.selection = null; }
+    finally {
+      const sdk = this.sdk; this.sdk = null; this.selection = null;
+      sdk?.destroy(); this.onDevices([]);
+    }
   }
 }
