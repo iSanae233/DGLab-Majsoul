@@ -25,6 +25,8 @@ npm run dev
 
 `wrangler.toml` 也声明了输出目录。GitHub 仓库为 `iSanae233/DGLab-Majsoul`；当前尚未部署 Pages 项目。
 
+本项目实际 Pages 域名为 `https://dglab-majsoul.pages.dev`，已在 `wrangler.toml` 的 `[vars]` 中配置 `DASHBOARD_ORIGIN`。Pages 读取 Wrangler 配置时，应以仓库中的变量为准；首次部署实测发现只在创建界面填写变量，构建仍可能报告没有变量。更换域名时同步修改此配置，并重新构建、部署和安装脚本。
+
 ### 避免误建为 Workers 项目
 
 Cloudflare 的“Workers & Pages”入口包含两种不同项目。如果日志中出现单独的 **Deploy command: `npx wrangler deploy`**，并报 `Missing entry-point to Worker script or to assets directory`，说明进入了 Workers 构建流程。本仓库的 `pages_build_output_dir` 配置用于 Pages，不能交给这个 Workers 部署命令。

@@ -1,3 +1,6 @@
 name = "dglab-majsoul"
 pages_build_output_dir = "dist/site"
 compatibility_date = "2026-11-07"
+
+[vars]
+DASHBOARD_ORIGIN = "https://dglab-majsoul.pages.dev"
