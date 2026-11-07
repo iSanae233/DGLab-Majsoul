@@ -87,3 +87,20 @@ test('self draw, ambiguous payments, other discarder and restored rounds never p
     assert.equal(result.some(e => e.type === 'deal-in'), false, mode);
   }
 });
+
+test('live public discard metadata identifies Dora without exporting drawn tiles', () => {
+  const s = new ProtocolSession(); authenticate(s);
+  s.feed('in', action('ActionNewRound', { scores: [25000,25000,25000,25000], doras: ['4p'] }));
+  const dora = s.feed('in', action('ActionDiscardTile', { seat: 1, tile: '5p' }, 1))[0];
+  assert.equal(dora.isDora, true); assert.equal(dora.live, true); assert.equal(dora.round, '0:0:0');
+  assert.deepEqual(s.feed('in', action('ActionDealTile', { seat: 1, tile: '3s', doras: ['4p','9s'] }, 2)), []);
+  assert.equal(s.feed('in', action('ActionDiscardTile', { seat: 1, tile: '1s' }, 3))[0].isDora, true);
+  assert.equal(s.feed('in', action('ActionDiscardTile', { seat: 1, tile: '0s' }, 4))[0].isDora, true);
+});
+test('replayed restored round does not re-enable live triggers', () => {
+  const s = new ProtocolSession(); authenticate(s);
+  s.feed('out', frame(2, '.lq.FastTest.syncGame', encode('ReqSyncGame', {}), 27));
+  s.feed('in', frame(3, '', encode('ResSyncGame', { game_restore: { actions: [{ name: 'ActionNewRound', step: 0, data: encode('ActionNewRound', {}) }] } }), 27));
+  assert.deepEqual(s.feed('in', action('ActionNewRound', {})), []);
+  assert.equal(s.feed('in', action('ActionDiscardTile', { seat: 1, tile: '0p' }, 1))[0].live, false);
+});

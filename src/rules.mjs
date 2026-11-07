@@ -1,4 +1,5 @@
 import { COYOTE_WAVEFORMS } from 'dglab-kit';
+import { TRIGGERS, triggerLabel } from './triggers.mjs';
 export const WAVEFORMS = Object.entries(COYOTE_WAVEFORMS).map(([value, wave]) => ({ value, label: wave.label.cn }));
 export const STRENGTH_MODES = { temporary: '强度临时变化', permanent: '强度永久变化', reset: '强度临时归零' };
 export function customPlan(config) {
@@ -21,4 +22,16 @@ export function customPlan(config) {
 }
 export function describePlan(plan) {
   return Object.entries(plan.channels).map(([channel, rule]) => `${channel} 通道：${STRENGTH_MODES[rule.mode]}${rule.mode === 'reset' ? '' : ` ${rule.delta >= 0 ? '+' : ''}${rule.delta}`}，${rule.durationMs / 1000} 秒${rule.waveform ? `，波形 ${WAVEFORMS.find(w => w.value === rule.waveform)?.label}` : '，保持 App 波形'}`).join('；');
+}
+export function customEventPlans(config) {
+  if (!config.eventRules) return [{ trigger: 'deal-in', plan: customPlan(config) }];
+  if (typeof config.eventRules !== 'object' || Array.isArray(config.eventRules) ||
+    Object.keys(config.eventRules).some(key => !TRIGGERS.some(trigger => trigger.value === key))) throw new Error('存在未知的触发事件');
+  const enabled = TRIGGERS.filter(trigger => Object.hasOwn(config.eventRules, trigger.value) && config.eventRules[trigger.value]?.enabled === true);
+  if (!enabled.length) throw new Error('请至少启用一个触发事件');
+  return enabled.map(trigger => {
+    const rule = config.eventRules[trigger.value];
+    try { return { trigger: trigger.value, plan: customPlan({ ...config, channels: rule.channels, syncChannels: rule.syncChannels }) }; }
+    catch (error) { throw new Error(`${triggerLabel(trigger.value)}：${error.message}`); }
+  });
 }

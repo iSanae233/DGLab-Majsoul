@@ -17,7 +17,8 @@ test('dashboard mounts defaults and cannot arm without the game bridge', async (
     setInterval: () => 1, clearInterval() {}, navigator: { clipboard: { writeText: async () => {} } } });
   vm.runInContext(compiled.outputFiles[0].text, context);
   assert.equal(document.querySelector('h1').textContent, 'DGLab-Majsoul 控制台');
-  assert.equal(document.querySelector('input[type=checkbox]').checked, true);
+  assert.equal(document.querySelector('#simulation').checked, true);
+  assert.equal(document.querySelector('#rule-enabled').checked, false);
   assert.equal(document.querySelector('#strategy').value, 'custom');
   assert.equal(document.querySelector('#maximum').value, '0');
   assert.equal(document.querySelector('#strength-delta').value, '0');
@@ -34,7 +35,7 @@ test('dashboard mounts defaults and cannot arm without the game bridge', async (
   document.querySelector('#rate').value = '2';
   document.querySelector('#maximum').value = '30';
   document.querySelector('#rate').dispatchEvent(new domWindow.Event('input'));
-  assert.equal(document.querySelector('#rule-preview').textContent, '临时强度 16 · 5 秒');
+  assert.equal(document.querySelector('#rule-preview').textContent, '临时强度 8 · 5 秒');
   document.querySelector('#stop').dispatchEvent(new domWindow.Event('click'));
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(document.querySelector('#operation-status').textContent, '联动已暂停');
@@ -45,6 +46,32 @@ test('dashboard mounts defaults and cannot arm without the game bridge', async (
   assert.equal(document.querySelector('#pair-link').value, '');
   assert.equal(document.querySelector('#pairing').hidden, true);
   assert.equal(document.querySelector('#show-pairing').hidden, true);
+  const choose = (id, value) => {
+    const options = [...document.querySelector(id).querySelectorAll('option')];
+    options.forEach(option => { option.selected = false; }); options.find(option => option.value === value).selected = true;
+    document.querySelector(id).dispatchEvent(new domWindow.Event('change'));
+  };
+  choose('#strategy', 'custom');
+  document.querySelector('#rule-enabled').checked = true;
+  document.querySelector('#strength-delta').value = '2';
+  document.querySelector('#strength-delta').dispatchEvent(new domWindow.Event('input'));
+  choose('#trigger', 'discard-dora');
+  assert.equal(document.querySelector('#strength-delta').value, '0');
+  assert.equal(document.querySelector('#rule-enabled').checked, false);
+  document.querySelector('#rule-enabled').checked = true;
+  document.querySelector('#strength-delta').value = '5';
+  document.querySelector('#strength-delta').dispatchEvent(new domWindow.Event('input'));
+  choose('#trigger', 'deal-in');
+  assert.equal(document.querySelector('#strength-delta').value, '2');
+  assert.equal(document.querySelector('#rule-enabled').checked, true);
+  document.querySelector('#maximum').value = '201';
+  document.querySelector('#maximum').dispatchEvent(new domWindow.Event('input'));
+  assert.equal(document.querySelector('#maximum').value, '200');
+  document.querySelector('#stop-key').dispatchEvent(new domWindow.Event('focus'));
+  const key = new domWindow.Event('keydown', { bubbles: true, cancelable: true });
+  Object.defineProperties(key, { key: { value: 'g' }, code: { value: 'KeyG' } });
+  document.querySelector('#stop-key').dispatchEvent(key);
+  assert.equal(document.querySelector('#stop-key').value, 'G');
   const instance = 'a'.repeat(32);
   const gameWindow = { closed: false, postMessage(message) {
     if (message.kind !== 'hello') return;

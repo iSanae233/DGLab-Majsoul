@@ -105,3 +105,23 @@ footer { display: flex; justify-content: space-between; padding: 25px 0; margin-
 .sync-label input { accent-color: var(--accent); }
 .rule-common, #linear-rules { margin-top: 18px; }
 .activity-health { padding: 10px 12px; border: 1px solid #33534f; border-radius: 7px; background: #73ddc508; color: #9bc8bd; font-size: 11px; margin: 0 0 20px; }
+
+/* Keep rule controls readable as the editor grows. */
+.section-heading p, .pairing p, .activity-intro { font-size: 13px; line-height: 1.8; }
+h2 { font-size: 19px; }
+.field { font-size: 13px; gap: 10px; }
+input:not([type=checkbox]), select, textarea { font-size: 14px; min-height: 46px; }
+.field small, .field-help { font-size: 12px; line-height: 1.8; }
+.rule-channel { padding: 18px; margin-top: 20px; }
+.rule-channel legend, .sync-label { font-size: 13px; }
+.trigger-editor { margin-top: 20px; padding: 18px; background: #0e1825; border: 1px solid #30465a; border-radius: 9px; }
+.rule-enable { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 13px; color: #bad8d1; }
+.rule-enable input { accent-color: var(--accent); width: 16px; height: 16px; }
+.trigger-editor .field-help { margin-bottom: 0; }
+.shortcut-input { cursor: pointer; font-family: ui-monospace, monospace; border-style: dashed !important; }
+.shortcut-input:focus { border-color: var(--accent); background: #16302d; }
+.rule-preview { font-size: 12px; line-height: 1.8; }
+.rule-preview strong { font-size: 14px; }
+.operation-status, .activity-health, .operation-list li { font-size: 12px; }
+.event-row strong { font-size: 13px; }
+@media (max-width: 560px) { .rule-channel, .trigger-editor { padding: 14px; } .rule-channel .two-columns { grid-template-columns: 1fr; } }

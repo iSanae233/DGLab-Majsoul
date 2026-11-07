@@ -80,9 +80,9 @@ export class DashboardBridge {
     } else if (data.kind === 'event' && this.connected && data.instance === this.instance &&
       Number.isSafeInteger(data.sequence) && data.sequence > this.sequence && validEvent(data.event)) {
       this.sequence = data.sequence;
-      if (data.event.type === 'deal-in' && (!Number.isFinite(Date.parse(data.event.time)) ||
+      if ((data.event.live === true || data.event.type === 'deal-in') && (!Number.isFinite(Date.parse(data.event.time)) ||
         Math.abs(this.now() - Date.parse(data.event.time)) > 10000)) {
-        this.onState('点炮事件已过期，请重新启用联动'); return;
+        this.onState('牌局触发事件已过期，请重新启用联动'); return;
       }
       this.onEvent({ ...data.event, connection: `${this.instance}:${data.event.connection}` });
     }
@@ -92,7 +92,7 @@ export class DashboardBridge {
       instance: this.instance, text: String(text).slice(0, 500) }, this.origin);
   }
   configureStopKey(key) {
-    if (!STOP_KEYS.includes(key)) return;
+    if (!validShortcut(key)) return;
     this.stopKey = key;
     if (this.connected) this.game.postMessage({ channel: CHANNEL, kind: 'settings', session: this.session,
       instance: this.instance, stopKey: key }, this.origin);
@@ -100,7 +100,6 @@ export class DashboardBridge {
   destroy() { this.scope.removeEventListener('message', this.listener); this.connected = false; }
 }
 
-export const STOP_KEYS = ['F7', 'F8', 'F9', 'F10', 'Escape'];
 export class GameBridge {
   session = null;
   sequence = 0;
@@ -129,7 +128,7 @@ export class GameBridge {
       for (const pending of this.pending.splice(0)) this.publish(pending);
     } else if (data.kind === 'status' && data.session === this.session && data.instance === this.instance && typeof data.text === 'string') {
       this.onStatus(data.text.slice(0, 500));
-    } else if (data.kind === 'settings' && data.session === this.session && data.instance === this.instance && STOP_KEYS.includes(data.stopKey)) {
+    } else if (data.kind === 'settings' && data.session === this.session && data.instance === this.instance && validShortcut(data.stopKey)) {
       this.stopKey = data.stopKey;
     }
   }
@@ -161,3 +160,4 @@ export class GameBridge {
   stop() { this.send({ kind: 'stop' }); }
   destroy() { this.scope.removeEventListener('message', this.listener); }
 }
+import { validShortcut } from './shortcut.mjs';

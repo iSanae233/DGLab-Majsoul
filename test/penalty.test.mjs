@@ -7,6 +7,10 @@ const event = { type: 'deal-in', connection: 1, round: '0:0:0', step: 10, loss: 
 test('linear intensity, fixed duration and ceiling are enforced; invalid values rejected', () => {
   assert.deepEqual(penaltyFor(8300, config), { intensity: 17, durationMs: 5000 });
   assert.equal(penaltyFor(48000, config).intensity, 30);
+  assert.equal(penaltyFor(3900, { ...config, per1000: 1 }).intensity, 4);
+  assert.equal(penaltyFor(3400, config).intensity, 7, 'round final intensity rather than rounding points first');
+  assert.equal(penaltyFor(3500, { ...config, per1000: 1 }).intensity, 4);
+  assert.equal(penaltyFor(100, { ...config, per1000: 0.1 }).intensity, 0);
   for (const loss of [0, -1, NaN, Infinity]) assert.throws(() => penaltyFor(loss, config));
   for (const patch of [{ maxIntensity: 0 }, { maxIntensity: 201 }, { durationMs: 0 }, { durationMs: 10001 }, { per1000: Infinity }]) {
     assert.throws(() => penaltyFor(8000, { ...config, ...patch }));

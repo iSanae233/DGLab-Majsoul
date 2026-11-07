@@ -1,5 +1,6 @@
 import protobuf from 'protobufjs/light.js';
 import schema from './protocol/liqi.json' with { type: 'json' };
+import { isDoraDiscard } from './dora.mjs';
 
 const root = protobuf.Root.fromJSON(schema);
 const wrapper = root.lookupType('lq.Wrapper');
@@ -23,11 +24,14 @@ export function decodeActionData(bytes) {
 export class ProtocolSession {
   pending = new Map();
   accountId = null;
+  gameId = null;
   me = null;
   seen = new Set();
   round = 'unknown';
   sourceSeat = null;
   liveRound = false;
+  doraIndicators = [];
+  playerCount = 4;
 
   feed(direction, input) {
     const bytes = new Uint8Array(input);
@@ -47,6 +51,10 @@ export class ProtocolSession {
       if (this.pending.size > 128) this.pending.delete(this.pending.keys().next().value);
       if (name.endsWith('.authGame')) {
         const request = decode('lq.ReqAuthGame', envelope.data);
+        if (request.game_uuid && request.game_uuid !== this.gameId) {
+          this.gameId = request.game_uuid; this.seen.clear(); this.liveRound = false;
+          this.round = 'unknown'; this.sourceSeat = null; this.doraIndicators = [];
+        }
         this.accountId = request.account_id || null;
       }
       return [];
@@ -70,36 +78,44 @@ export class ProtocolSession {
       this.round = 'restored';
       this.liveRound = false;
       this.sourceSeat = null;
+      this.doraIndicators = [];
       this.seen.clear();
       for (const action of data.game_restore?.actions ?? []) {
         if (action.name === 'ActionNewRound') {
           const round = decode('lq.ActionNewRound', Uint8Array.from(action.data));
           this.round = `${round.chang}:${round.ju}:${round.ben}`;
+          this.doraIndicators = round.doras.length ? round.doras : round.dora ? [round.dora] : [];
+          this.playerCount = round.scores.length === 3 ? 3 : 4;
         }
         this.remember(`${this.round}:${action.step}:${action.name}`);
       }
       return [{ type: 'resync', me: this.me, historicalActions: data.game_restore?.actions?.length ?? 0 }];
     }
     if (name === '.lq.NotifyGameEndResult') {
+      this.liveRound = false; this.sourceSeat = null;
       return [{ type: 'game-end', me: this.me, players: (data.result?.players ?? []).map(p => ({ seat: p.seat, score: p.part_point_1 })) }];
     }
-    const actionNames = ['ActionNewRound', 'ActionDiscardTile', 'ActionChiPengGang', 'ActionAnGangAddGang', 'ActionHule', 'ActionNoTile', 'ActionLiuJu', 'ActionBaBei'];
+    const actionNames = ['ActionNewRound', 'ActionDealTile', 'ActionDiscardTile', 'ActionChiPengGang', 'ActionAnGangAddGang', 'ActionHule', 'ActionNoTile', 'ActionLiuJu', 'ActionBaBei'];
     if (!actionNames.includes(data.name)) return [];
     const action = decode(`lq.${data.name}`, decodeActionData(data.data));
-    if (data.name === 'ActionNewRound') {
-      this.round = `${action.chang}:${action.ju}:${action.ben}`;
-      this.sourceSeat = null;
-      this.liveRound = true;
-    }
-    const key = `${this.round}:${data.step}:${data.name}`;
+    const nextRound = data.name === 'ActionNewRound' ? `${action.chang}:${action.ju}:${action.ben}` : this.round;
+    const key = `${nextRound}:${data.step}:${data.name}`;
     if (this.seen.has(key)) return [];
     this.remember(key);
-    const base = { me: this.me, step: data.step };
+    if (data.name === 'ActionNewRound') {
+      this.round = nextRound;
+      this.sourceSeat = null;
+      this.liveRound = true;
+      this.playerCount = action.scores.length === 3 ? 3 : 4;
+      this.doraIndicators = action.doras.length ? action.doras : action.dora ? [action.dora] : [];
+    }
+    if (action.doras?.length) this.doraIndicators = action.doras.slice();
+    const base = { me: this.me, step: data.step, round: this.round, live: this.liveRound };
     switch (data.name) {
       case 'ActionNewRound': return [{ ...base, type: 'round-start', round: this.round, scores: action.scores }];
       case 'ActionDiscardTile':
         this.sourceSeat = action.seat;
-        return [{ ...base, type: 'discard', seat: action.seat, tile: action.tile }, ...(action.is_liqi || action.is_wliqi ? [{ ...base, type: 'riichi', seat: action.seat }] : [])];
+        return [{ ...base, type: 'discard', seat: action.seat, tile: action.tile, isDora: isDoraDiscard(action.tile, this.doraIndicators, this.playerCount) }, ...(action.is_liqi || action.is_wliqi ? [{ ...base, type: 'riichi', seat: action.seat }] : [])];
       case 'ActionChiPengGang':
         this.sourceSeat = null;
         return [{ ...base, type: 'meld', seat: action.seat, kind: action.type, fromSeats: action.froms }];
@@ -119,7 +135,8 @@ export class ProtocolSession {
         this.sourceSeat = null;
         return events;
       }
-      case 'ActionNoTile': return [{ ...base, type: 'exhaustive-draw', readySeats: action.players.flatMap((p, i) => p.tingpai ? [i] : []) }];
+      case 'ActionNoTile': return [{ ...base, type: 'exhaustive-draw', readyKnown: action.players.length === this.playerCount,
+        readySeats: action.players.flatMap((p, i) => p.tingpai ? [i] : []) }];
       case 'ActionLiuJu': return [{ ...base, type: 'abortive-draw', reason: action.type }];
       case 'ActionBaBei': return [{ ...base, type: 'north-extraction', seat: action.seat }];
       default: return [];

@@ -1,12 +1,13 @@
 import { ProtocolSession } from './protocol.mjs';
 import { installCapture } from './capture.mjs';
 import { GameBridge } from './bridge.mjs';
+import { shortcutMatches, shortcutLabel } from './shortcut.mjs';
 
 const recent = [];
 let output;
 let status;
 const operationLog = [];
-const VERSION = '0.5.1';
+const VERSION = '0.6.0';
 const bridge = new GameBridge(window, __DASHBOARD_ORIGIN__, text => {
   operationLog.push(text);
   if (operationLog.length > 5) operationLog.shift();
@@ -33,11 +34,11 @@ function mount() {
   const connect = document.createElement('button'); connect.textContent = '打开并关联控制台';
   connect.addEventListener('click', () => { try { bridge.connectDashboard(); } catch (error) { status.textContent = error.message; } });
   window.addEventListener('keydown', event => {
-    if (!event.repeat && event.key === bridge.stopKey) { event.preventDefault(); bridge.stop(); }
+    if (shortcutMatches(event, bridge.stopKey)) { event.preventDefault(); bridge.stop(); }
   });
   status = document.createElement('pre'); status.style.whiteSpace = 'pre-wrap'; status.textContent = '等待控制台操作结果';
   const health = document.createElement('p');
-  const refreshHealth = () => { bridge.requestLink(); health.textContent = bridge.session && Date.now() - bridge.lastHello <= 90000 ? `控制台已连接 · ${bridge.stopKey} 停止` : '控制台未连接；可点击上方按钮关联'; };
+  const refreshHealth = () => { bridge.requestLink(); health.textContent = bridge.session && Date.now() - bridge.lastHello <= 90000 ? `控制台已连接 · ${shortcutLabel(bridge.stopKey)} 停止` : '控制台未连接；可点击上方按钮关联'; };
   refreshHealth(); const timer = setInterval(refreshHealth, 3000);
   window.addEventListener('pagehide', () => { clearInterval(timer); bridge.destroy(); });
   output = document.createElement('pre'); output.style.cssText = 'white-space:pre-wrap;word-break:break-all';

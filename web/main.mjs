@@ -2,11 +2,16 @@ import qrcode from 'qrcode-generator';
 import { DglabController } from '../src/dglab.mjs';
 import { PenaltyEngine, penaltyFor } from '../src/penalty.mjs';
 import { DashboardBridge, GAME_URLS } from '../src/bridge.mjs';
-import { WAVEFORMS, describePlan } from '../src/rules.mjs';
+import { TRIGGERS } from '../src/triggers.mjs';
+import { recordShortcut, shortcutMatches, shortcutLabel } from '../src/shortcut.mjs';
+import { WAVEFORMS, customPlan, describePlan } from '../src/rules.mjs';
 import { dashboardMarkup } from './layout.mjs';
 
 const recent = [], operations = [];
-let total = 0, devices = [], pairGeneration = 0;
+let total = 0, devices = [], pairGeneration = 0, scriptVersion = null;
+let editingTrigger = 'deal-in', stopShortcut = 'F7', recordingShortcut = false;
+const emptyChannel = () => ({ mode: 'temporary', delta: 0, durationMs: 5000, waveform: null });
+const eventRules = Object.fromEntries(TRIGGERS.map(trigger => [trigger.value, { enabled: false, syncChannels: true, channels: { A: emptyChannel(), B: emptyChannel() } }]));
 const ui = {};
 const labels = { 'script-ready': '脚本就绪', discard: '弃牌', riichi: '立直', meld: '吃碰杠', kan: '杠', win: '和牌', 'deal-in': '点炮结算',
   'round-start': '新一局', 'game-start': '进入对局', resync: '恢复对局', 'north-extraction': '拔北',
@@ -28,7 +33,7 @@ function renderEvents() {
   ui['event-list'].replaceChildren(...recent.slice(-12).reverse().map(event => {
     const item = document.createElement('li'); item.className = 'event-row';
     const time = document.createElement('time'); time.textContent = new Date(event.time).toLocaleTimeString('zh-CN', { hour12: false });
-    const title = document.createElement('strong'); title.textContent = labels[event.type] || event.type;
+    const title = document.createElement('strong'); title.textContent = event.type === 'discard' && event.isDora ? '弃牌 · Dora' : labels[event.type] || event.type;
     const detail = document.createElement('span'); detail.textContent = event.type === 'script-ready' ? `脚本版本 ${event.version || '未知'}` : event.loss ? `实际失分 ${event.loss.toLocaleString()} 点` :
       event.tile ? `座位 ${event.seat} · ${event.tile}` : event.round ? `局标识 ${event.round}` : `连接 ${String(event.connection).split(':').at(-1)}`;
     item.append(time, title, detail); return item;
@@ -72,6 +77,7 @@ const controller = new DglabController(list => {
 const engine = new PenaltyEngine(controller, log);
 const bridge = new DashboardBridge(window, event => {
   const record = { time: new Date().toISOString(), ...event };
+  if (record.type === 'script-ready') scriptVersion = record.version;
   total++; recent.push(record); if (recent.length > 100) recent.shift(); renderEvents();
   if (ui['activity-health']) ui['activity-health'].textContent = `脚本事件已接收 · 最近 ${new Date(record.time).toLocaleTimeString('zh-CN', { hour12: false })}${record.type === 'script-ready' ? ` · 版本 ${record.version}` : ''}`;
   engine.handle(record).catch(() => log('停止未确认，请在 App 手动停止'));
@@ -91,7 +97,9 @@ function mount() {
   for (const select of [ui.waveform, ui['waveform-b']]) WAVEFORMS.forEach(wave => select.append(new Option(wave.label, wave.value)));
   const emergencyStop = () => engine.stop().then(() => log('快捷停止：联动已暂停')).catch(error => log(error.message));
   bridge.onStop = emergencyStop;
-  window.addEventListener('keydown', event => { if (!event.repeat && event.key === ui['stop-key'].value) { event.preventDefault(); emergencyStop(); } });
+  window.addEventListener('keydown', event => { if (!recordingShortcut && shortcutMatches(event, stopShortcut)) { event.preventDefault(); emergencyStop(); } });
+  TRIGGERS.forEach(trigger => { const option = new Option(trigger.label, trigger.value); option.selected = trigger.value === editingTrigger; ui.trigger.append(option); });
+  ui['rule-enabled'].checked = false;
   GAME_URLS.forEach((url, i) => { const option = new Option(['繁中服', '日服', '国际服'][i], url); option.selected = i === 0; ui.server.append(option); });
   ui['open-game'].addEventListener('click', () => { try { bridge.open(ui.server.value); } catch (error) { log(error.message); } });
   ui['show-pairing'].addEventListener('click', () => { ui.pairing.hidden = !ui.pairing.hidden; });
@@ -127,11 +135,26 @@ function mount() {
   const readChannel = suffix => ({ mode: ui[`strength-mode${suffix}`].value,
     delta: Number(ui[`strength-delta${suffix}`].value), durationMs: Math.round(Number(ui[`custom-seconds${suffix}`].value) * 1000),
     waveform: ui[`waveform${suffix}`].value || null });
+  const saveDraft = () => { eventRules[editingTrigger] = { enabled: ui['rule-enabled'].checked, syncChannels: ui['sync-channels'].checked, channels: { A: readChannel(''), B: readChannel('-b') } }; };
+  const loadDraft = () => {
+    const draft = eventRules[editingTrigger];
+    ui['rule-enabled'].checked = draft.enabled; ui['sync-channels'].checked = draft.syncChannels;
+    for (const [name, suffix] of [['A', ''], ['B', '-b']]) {
+      const rule = draft.channels[name];
+      const modes = [...ui[`strength-mode${suffix}`].querySelectorAll('option')];
+      modes.forEach(option => { option.selected = false; }); modes.find(option => option.value === rule.mode).selected = true;
+      ui[`strength-delta${suffix}`].value = String(rule.delta);
+      ui[`custom-seconds${suffix}`].value = String(rule.durationMs / 1000); const waves = [...ui[`waveform${suffix}`].querySelectorAll('option')];
+      waves.forEach(option => { option.selected = false; }); waves.find(option => option.value === (rule.waveform || '')).selected = true;
+    }
+  };
   const config = () => {
     const common = { strategy: ui.strategy.value, maxIntensity: Number(ui.maximum.value), simulation: ui.simulation.checked };
-    if (common.strategy === 'custom') return { ...common, syncChannels: ui['sync-channels'].checked,
-      targetChannel: ui.channel.value === 'both' ? 'both' : ui.channel.value === '1' ? 'B' : 'A',
-      channels: { A: readChannel(''), B: readChannel('-b') } };
+    if (common.strategy === 'custom') {
+      saveDraft();
+      return { ...common, targetChannel: ui.channel.value === 'both' ? 'both' : ui.channel.value === '1' ? 'B' : 'A',
+        eventRules: JSON.parse(JSON.stringify(eventRules)) };
+    }
     if (ui.channel.value === 'both') throw new Error('按失分换算时请选择单个通道，或使用自定义 A+B 指令');
     return { ...common, per1000: Number(ui.rate.value), durationMs: Number(ui.duration.value) };
   };
@@ -141,23 +164,45 @@ function mount() {
     ui['channel-b-rules'].hidden = ui['sync-channels'].checked;
     ui['strength-delta'].disabled = ui['strength-mode'].value === 'reset';
     ui['strength-delta-b'].disabled = ui['strength-mode-b'].value === 'reset';
-    ui['preview-caption'].textContent = custom ? '下一次点炮的指令预览' : '换算预览 / 失分 8,000 点';
-    bridge.configureStopKey(ui['stop-key'].value);
+    ui['preview-caption'].textContent = custom ? `${TRIGGERS.find(item => item.value === editingTrigger)?.label} · ${ui['rule-enabled'].checked ? '已启用' : '未启用'}` : '四舍五入预览 / 失分 3,900 点';
+    bridge.configureStopKey(stopShortcut);
     try {
-      const result = penaltyFor(8000, config());
+      const current = config();
+      const result = custom ? customPlan({ ...current, ...eventRules[editingTrigger] }) : penaltyFor(3900, current);
       ui['rule-preview'].textContent = custom ? describePlan(result) : `临时强度 ${result.intensity} · ${(result.durationMs / 1000).toLocaleString()} 秒`;
     } catch (error) { ui['rule-preview'].textContent = error.message; }
   };
-  for (const input of [ui.device, ui.channel, ui.rate, ui.maximum, ui.duration, ui.simulation, ui.strategy, ui['sync-channels'],
-    ui['strength-mode'], ui['strength-mode-b'], ui['strength-delta'], ui['strength-delta-b'], ui['custom-seconds'], ui['custom-seconds-b'], ui.waveform, ui['waveform-b'], ui['stop-key']]) {
-    const change = () => { preview(); if (engine.enabled) engine.stop().then(() => log('设置已改变，请重新启用')).catch(() => log('请在 App 手动停止')); };
+  for (const input of [ui.device, ui.channel, ui.rate, ui.maximum, ui.duration, ui.simulation, ui.strategy, ui['rule-enabled'], ui['sync-channels'],
+    ui['strength-mode'], ui['strength-mode-b'], ui['strength-delta'], ui['strength-delta-b'], ui['custom-seconds'], ui['custom-seconds-b'], ui.waveform, ui['waveform-b']]) {
+    const change = () => { if (Number(ui.maximum.value) > 200) ui.maximum.value = '200'; preview(); if (engine.enabled) engine.stop().then(() => log('设置已改变，请重新启用')).catch(() => log('请在 App 手动停止')); };
     input.addEventListener('input', change); input.addEventListener('change', change);
   }
+  ui.trigger.addEventListener('change', () => {
+    const key = ui.trigger.value; if (!Object.hasOwn(eventRules, key)) return;
+    saveDraft(); editingTrigger = key; loadDraft(); preview();
+    if (engine.enabled) engine.stop().then(() => log('触发事件已改变，请重新启用')).catch(() => log('请在 App 手动停止'));
+  });
+  ui['stop-key'].addEventListener('focus', () => {
+    recordingShortcut = true; ui['stop-key'].value = '请按快捷键…';
+    engine.stop().catch(() => log('请在 App 手动停止')); log('正在录入停止键，联动已暂停');
+  });
+  ui['stop-key'].addEventListener('keydown', event => {
+    event.preventDefault(); event.stopPropagation();
+    try {
+      const key = recordShortcut(event); if (!key) return;
+      stopShortcut = key; recordingShortcut = false;
+      ui['stop-key'].value = shortcutLabel(key); ui['stop-key'].blur();
+      preview(); log(`停止键已设为 ${shortcutLabel(key)}`);
+    } catch (error) { ui['stop-key'].value = '请换一个按键'; log(error.message); }
+  });
+  ui['stop-key'].addEventListener('blur', () => { recordingShortcut = false; ui['stop-key'].value = shortcutLabel(stopShortcut); });
   ui.arm.addEventListener('click', async () => {
     ui.arm.disabled = true;
     try {
       await engine.stop();
       if (!bridge.connected) throw new Error('请先从本页打开雀魂并等待脚本连接');
+      const modern = Number(scriptVersion?.split('.')[0]) > 0 || Number(scriptVersion?.split('.')[1]) >= 6;
+      if (!modern && (config().strategy === 'custom' && Object.entries(config().eventRules).some(([key, rule]) => key !== 'deal-in' && rule.enabled) || !['F7','F8','F9','F10','Escape'].includes(stopShortcut))) throw new Error('新增事件和按键录入需要用户脚本 0.6.0，请更新并刷新雀魂');
       const device = devices.find(item => JSON.stringify([item.clientId, item.slotId]) === ui.device.value);
       controller.selection = device ? { ...device, channel: ui.channel.value === 'both' ? 'both' : Number(ui.channel.value) } : null;
       engine.arm(config()); log(ui.simulation.checked ? '模拟已启用' : '真实输出已启用；重连或异常后需重新启用');
@@ -175,7 +220,7 @@ function mount() {
     badge('relay', '中继未连接'); ui['relay-message'].textContent = '连接已断开。';
   });
   ui.copy.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(JSON.stringify({ version: '0.5.1', total, events: recent }, null, 2)); ui.copy.textContent = '已复制'; }
+    try { await navigator.clipboard.writeText(JSON.stringify({ version: '0.6.0', total, events: recent }, null, 2)); ui.copy.textContent = '已复制'; }
     catch { ui.copy.textContent = '复制失败，请允许剪贴板访问'; }
   });
   ui.clear.addEventListener('click', () => { recent.length = 0; renderEvents(); });

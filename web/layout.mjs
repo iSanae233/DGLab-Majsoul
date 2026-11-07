@@ -11,9 +11,9 @@ export const dashboardMarkup = `
 <div id="pairing" class="pairing" hidden><img id="qr-image" alt="App 配对二维码" hidden><div><h3>使用 App 扫码配对</h3><p>打开 App 的 Socket 功能进行扫描。请勿公开配对链接。</p><label class="field" for="pair-link">配对链接<textarea id="pair-link" readonly rows="3" hidden></textarea></label></div></div>
 <div class="two-columns"><label class="field" for="device">目标设备<select id="device"><option value="">等待 App 接入</option></select></label><label class="field" for="channel">输出通道<select id="channel"><option value="0" selected>A 通道</option><option value="1">B 通道</option><option value="both">A + B 通道</option></select></label></div>
 </section>
-<section class="card"><div class="section-heading"><span class="step">02</span><div><h2>自定义点炮惩罚</h2><p>选择强度操作、覆盖波形、持续时间和快捷停止键。</p></div></div>
-<label class="field" for="strategy">规则模式<select id="strategy"><option value="custom" selected>自定义指令</option><option value="linear">按失分换算强度</option></select></label>
-<div id="custom-rules"><label class="sync-label"><input id="sync-channels" type="checkbox" checked> A / B 通道使用相同规则</label>
+<section class="card"><div class="section-heading"><span class="step">02</span><div><h2>电击惩罚</h2><p>选择触发事件与惩罚方式，先在模拟模式中验证。</p></div></div>
+<label class="field" for="strategy">规则模式<select id="strategy"><option value="custom" selected>1 · 自定义指令</option><option value="linear">2 · 按失分换算</option></select></label>
+<div id="custom-rules"><div class="trigger-editor"><label class="field" for="trigger">触发事件<select id="trigger"></select></label><label class="rule-enable"><input id="rule-enabled" type="checkbox"> 启用此事件</label><p class="field-help">各事件独立设置，勾选后才会触发；刷新会重置。连续触发不排队叠加。</p></div><label class="sync-label"><input id="sync-channels" type="checkbox" checked> A / B 通道使用相同规则</label>
 <fieldset class="rule-channel"><legend>A 通道 / 同步规则</legend>
 <div class="two-columns"><label class="field" for="strength-mode">强度操作<select id="strength-mode"><option value="temporary" selected>强度临时变化</option><option value="permanent">强度永久变化</option><option value="reset">强度临时归零</option></select></label><label class="field" for="strength-delta">强度变化<input id="strength-delta" type="number" value="0" min="-40" max="40" step="1"><small>正数增加，负数减少</small></label><label class="field" for="custom-seconds">惩罚时长（秒）<input id="custom-seconds" type="number" value="5" min="0" max="60" step="0.1"></label><label class="field" for="waveform">覆盖波形<select id="waveform"><option value="" selected>保持 App 当前波形</option></select></label></div>
 </fieldset>
@@ -21,7 +21,7 @@ export const dashboardMarkup = `
 <div class="two-columns"><label class="field" for="strength-mode-b">B 通道强度操作<select id="strength-mode-b"><option value="temporary" selected>强度临时变化</option><option value="permanent">强度永久变化</option><option value="reset">强度临时归零</option></select></label><label class="field" for="strength-delta-b">B 通道强度变化<input id="strength-delta-b" type="number" value="0" min="-40" max="40" step="1"></label><label class="field" for="custom-seconds-b">B 通道惩罚时长（秒）<input id="custom-seconds-b" type="number" value="5" min="0" max="60" step="0.1"></label><label class="field" for="waveform-b">B 通道覆盖波形<select id="waveform-b"><option value="" selected>保持 App 当前波形</option></select></label></div>
 </fieldset><p class="field-help">临时变化结束后撤销该临时变化；临时归零结束后按当前上限恢复原基础强度；快捷停止、关闭或断开会取消恢复。永久变化会保留并可能累积，时长只影响覆盖波形，0 秒时仅改变强度。</p></div>
 <div id="linear-rules" hidden><div class="two-columns"><label class="field" for="rate">每 1000 点强度<input id="rate" type="number" value="0" min="0" max="200" step="0.1"></label><label class="field" for="duration">固定时长 ms<input id="duration" type="number" value="5000" min="100" max="10000" step="100"></label></div></div>
-<div class="two-columns rule-common"><label class="field" for="maximum">强度上限<input id="maximum" type="number" value="0" min="0" max="200" step="1"><small>同时受 App 上报的通道上限约束</small></label><label class="field" for="stop-key">快捷停止键<select id="stop-key"><option value="F7" selected>F7</option><option>F8</option><option>F9</option><option>F10</option><option>Escape</option></select><small>控制台和已关联的游戏窗口均可使用</small></label></div>
+<div class="two-columns rule-common"><label class="field" for="maximum">强度上限<input id="maximum" type="number" value="0" min="0" max="200" step="1"><small>同时受 App 上报的通道上限约束</small></label><label class="field" for="stop-key">快捷停止键<input id="stop-key" class="shortcut-input" type="text" value="F7" readonly aria-describedby="shortcut-help" autocomplete="off"><small id="shortcut-help">点击后按键录入，支持组合键；默认 F7。普通字母在输入框内不会触发停止。</small></label></div>
 <div class="rule-preview"><span id="preview-caption">规则预览</span><strong id="rule-preview">请先设置规则和强度上限</strong></div>
 <label class="simulation-toggle"><input id="simulation" type="checkbox" checked><span><strong>仅模拟（不发送指令）</strong><small>先查看惩罚记录，再决定是否开启真实输出。</small></span><span class="toggle-track" aria-hidden="true"></span></label>
 </section>
@@ -37,4 +37,4 @@ export const dashboardMarkup = `
 <ol id="event-list" class="event-list"><li class="empty-state"><span class="empty-glyph" aria-hidden="true">東</span><strong>等待第一条牌局事件</strong><p>连接脚本后，弃牌、和牌和点炮结算会显示在这里。</p></li></ol>
 <button id="copy" class="secondary full-width">复制最近 100 条事件</button>
 </section><div class="usage-note"><strong>使用提示</strong><p>默认模拟，刷新后需重新启用。网络断开时，应能在 App 或设备端手动停止。</p><p>真实设备输出效果仍需实测。</p></div></aside></div>
-<footer><span>DGLab-Majsoul <span class="muted">/ v0.5.1</span></span><span>连接 · 配置 · 开始游戏</span></footer>`;
+<footer><span>DGLab-Majsoul <span class="muted">/ v0.6.0</span></span><span>连接 · 配置 · 开始游戏</span></footer>`;

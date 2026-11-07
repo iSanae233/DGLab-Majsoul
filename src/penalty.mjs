@@ -1,4 +1,5 @@
-import { customPlan, describePlan } from './rules.mjs';
+import { customPlan, customEventPlans, describePlan } from './rules.mjs';
+import { matchesTrigger, triggerLabel } from './triggers.mjs';
 
 export function penaltyFor(loss, config) {
   if (config.strategy === 'custom') return customPlan(config);
@@ -9,7 +10,7 @@ export function penaltyFor(loss, config) {
       !Number.isInteger(durationMs) || durationMs < 100 || durationMs > 10000) {
     throw new Error('请设置有效的换算、强度上限和时长（100–10000ms）');
   }
-  return { intensity: Math.min(maxIntensity, Math.ceil(loss / 1000 * per1000)), durationMs };
+  return { intensity: Math.min(maxIntensity, Math.round(loss / 1000 * per1000)), durationMs };
 }
 
 export class PenaltyEngine {
@@ -20,9 +21,11 @@ export class PenaltyEngine {
   config = { per1000: 0, maxIntensity: 0, durationMs: 5000, simulation: true };
   constructor(transport, log) { this.transport = transport; this.log = log; }
   arm(config) {
-    penaltyFor(1000, config);
+    const eventPlans = config.strategy === 'custom' ? customEventPlans(config) : null;
+    if (!eventPlans) penaltyFor(1000, config);
     if (!config.simulation && !this.transport.ready()) throw new Error('请先配对并选择设备通道');
     this.config = JSON.parse(JSON.stringify(config));
+    this.eventPlans = eventPlans;
     this.generation++;
     this.enabled = true;
   }
@@ -40,19 +43,23 @@ export class PenaltyEngine {
       }
       return;
     }
-    if (!this.enabled || event.type !== 'deal-in') return;
-    const key = `${event.connection}:${event.round}:${event.step}`;
+    if (!this.enabled) return;
+    const match = this.config.strategy === 'custom' ? this.eventPlans.find(rule => matchesTrigger(rule.trigger, event)) :
+      event.type === 'deal-in' ? { trigger: 'deal-in', plan: penaltyFor(event.loss, this.config) } : null;
+    if (!match) return;
+    const key = `${event.connection}:${event.round}:${event.step}:${match.trigger}`;
     if (this.seen.has(key)) return;
     this.seen.add(key);
     if (this.seen.size > 512) this.seen.delete(this.seen.values().next().value);
     if (this.busy) { this.log('已有任务，跳过本次惩罚（不排队）'); return; }
-    const command = penaltyFor(event.loss, this.config);
-    if (this.config.simulation) { this.log(command.strategy === 'custom' ? `模拟：点炮失分 ${event.loss}；${describePlan(command)}` : `模拟：点炮失分 ${event.loss}，临时强度 ${command.intensity}，${command.durationMs}ms`); return; }
+    const command = match.plan;
+    const reason = event.type === 'deal-in' ? `点炮失分 ${event.loss}` : triggerLabel(match.trigger);
+    if (this.config.simulation) { this.log(command.strategy === 'custom' ? `模拟：${reason}；${describePlan(command)}` : `模拟：点炮失分 ${event.loss}，临时强度 ${command.intensity}，${command.durationMs}ms`); return; }
     if (!this.transport.ready()) { this.enabled = false; this.log('设备不可用，已暂停'); return; }
     this.busy = true;
     const generation = this.generation;
     try {
-      this.log(command.strategy === 'custom' ? `请求：点炮失分 ${event.loss}；${describePlan(command)}` : `请求：点炮失分 ${event.loss}，临时强度上限 ${command.intensity}，${command.durationMs}ms`);
+      this.log(command.strategy === 'custom' ? `请求：${reason}；${describePlan(command)}` : `请求：点炮失分 ${event.loss}，临时强度上限 ${command.intensity}，${command.durationMs}ms`);
       const result = await this.transport.fire(command);
       if (generation !== this.generation) return;
       this.log(result?.details ? `任务已返回成功；${result.details.map(item => `${item.channel} 通道下发变化 ${item.delta >= 0 ? '+' : ''}${item.delta}`).join('；')}` : result?.skipped ? 'App 通道上限为零或无有效变化，未下发任务' :
