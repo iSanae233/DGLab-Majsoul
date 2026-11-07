@@ -36,7 +36,7 @@ try {
     await new Promise(resolve => setTimeout(resolve, 200));
   }
   assert.ok(ready, `Wrangler Pages did not start\n${output}`);
-  for (const path of ['/', '/app.js', '/style.css', '/userscripts/dglab-majsoul.user.js']) {
+  for (const path of ['/', '/app.js', '/style.css', '/favicon.svg', '/favicon.ico', '/site.webmanifest', '/assets/brand.svg', '/assets/apple-touch-icon.png', '/assets/icon-192.png', '/assets/icon-512.png', '/userscripts/dglab-majsoul.user.js']) {
     const response = await fetch(url + path, { signal: AbortSignal.timeout(10000) });
     assert.equal(response.status, 200, path);
     assert.equal(response.headers.get('x-content-type-options'), 'nosniff', path);

@@ -1,0 +1,15 @@
+{
+  "name": "DGLab-Majsoul 联动控制台",
+  "short_name": "DG × 雀魂",
+  "lang": "zh-CN",
+  "description": "连接雀魂与 DG-LAB，自定义牌局事件与设备反馈。自愿、边界、掌控。",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#100e10",
+  "theme_color": "#100e10",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

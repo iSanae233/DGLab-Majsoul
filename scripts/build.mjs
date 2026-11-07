@@ -8,6 +8,8 @@ const header = `// ==UserScript==
 // @namespace    dglab-majsoul-local
 // @version      ${version}
 // @description  将雀魂事件交给可信控制台，并显示惩罚操作
+// @icon         ${origin}/favicon.ico
+// @homepageURL  ${origin}/
 // @match        https://game.maj-soul.com/*
 // @match        https://game.mahjongsoul.com/*
 // @match        https://mahjongsoul.game.yo-star.com/*
@@ -24,6 +26,6 @@ await build({ ...common, entryPoints: ['src/index.mjs'], format: 'iife', outfile
   define: { __DASHBOARD_ORIGIN__: JSON.stringify(origin) }, banner: { js: header } });
 await cp('dist/dglab-majsoul.user.js', 'dist/site/userscripts/dglab-majsoul.user.js');
 await build({ ...common, entryPoints: ['web/main.mjs'], format: 'esm', outfile: 'dist/site/app.js' });
-for (const file of ['index.html', 'style.css', '_headers', '_routes.json']) await cp(`web/${file}`, `dist/site/${file}`);
+for (const file of ['index.html', 'style.css', '_headers', '_routes.json', 'favicon.svg', 'favicon.ico', 'site.webmanifest', 'assets']) await cp(`web/${file}`, `dist/site/${file}`, { recursive: true });
 await cp('web/index.html', 'dist/site/link/index.html');
 console.log(`Built ${version}; trusted dashboard: ${origin}; Pages output: dist/site`);

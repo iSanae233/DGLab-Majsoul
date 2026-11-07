@@ -5,7 +5,7 @@ import { DashboardBridge, GAME_URLS } from '../src/bridge.mjs';
 import { TRIGGERS } from '../src/triggers.mjs';
 import { ShortcutMatcher, ShortcutRecorder, shortcutLabel, validShortcut } from '../src/shortcut.mjs';
 import { RuleEditor, validDraft } from './rule-editor.mjs';
-import { dashboardMarkup } from './layout.mjs';
+import { dashboardMarkup, emptyEventMarkup } from './layout.mjs';
 
 const recent = [], operations = [];
 let total = 0, devices = [], pairGeneration = 0, scriptVersion = null;
@@ -26,7 +26,7 @@ function renderEvents() {
   if (!recent.length) {
     ui['event-list'].replaceChildren();
     const item = document.createElement('li'); item.className = 'empty-state';
-    item.textContent = '等待第一条牌局事件'; ui['event-list'].append(item); return;
+    item.innerHTML = emptyEventMarkup; ui['event-list'].append(item); return;
   }
   ui['event-list'].replaceChildren(...recent.slice(-12).reverse().map(event => {
     const item = document.createElement('li'); item.className = 'event-row';
@@ -104,14 +104,14 @@ function mount() {
   ui['show-pairing'].addEventListener('click', () => { ui.pairing.hidden = !ui.pairing.hidden; });
   ui['relay-address'].addEventListener('change', async () => {
     pairGeneration++; clearPairing(); engine.enabled = false;
-    ui.pair.disabled = false; ui.pair.textContent = '连接并生成配对二维码';
+    ui.pair.disabled = false; ui['pair-label'].textContent = '连接并生成配对二维码';
     try { await controller.disconnect(); log('中继地址已更改，请重新连接'); } catch { log('停止未确认，请在 App 手动停止'); }
     badge('relay', '中继未连接');
     ui['relay-message'].textContent = '地址已修改，等待重新连接。';
   });
   ui.pair.addEventListener('click', async () => {
     const generation = ++pairGeneration;
-    clearPairing(); ui.pair.disabled = true; ui.pair.textContent = '正在连接…';
+    clearPairing(); ui.pair.disabled = true; ui['pair-label'].textContent = '正在连接…';
     ui['relay-message'].textContent = '正在与 V4 中继建立连接…'; badge('relay', '中继连接中');
     try {
       await engine.stop();
@@ -128,7 +128,7 @@ function mount() {
       ui['relay-message'].textContent = '无法连接 V4 中继。请确认服务可用、地址正确，并允许浏览器访问。';
       log('配对失败，未启用输出');
     } finally {
-      if (generation === pairGeneration) { ui.pair.disabled = false; ui.pair.textContent = '连接并生成配对二维码'; }
+      if (generation === pairGeneration) { ui.pair.disabled = false; ui['pair-label'].textContent = '连接并生成配对二维码'; }
     }
   });
   const context = () => ({ maxIntensity: Number(ui.maximum.value), targetChannel: ui.channel.value === 'both' ? 'both' : ui.channel.value === '1' ? 'B' : 'A' });
@@ -216,14 +216,14 @@ function mount() {
     engine.stop().then(() => log(active ? '停止指令已确认，联动已暂停' : '联动已暂停')).catch(error => log(error.message));
   });
   ui.disconnect.addEventListener('click', async () => {
-    pairGeneration++; clearPairing(); ui.pair.disabled = false; ui.pair.textContent = '连接并生成配对二维码';
+    pairGeneration++; clearPairing(); ui.pair.disabled = false; ui['pair-label'].textContent = '连接并生成配对二维码';
     engine.enabled = false;
     try { await controller.disconnect(); log('已断开 App'); } catch { log('停止未确认，请在 App 手动停止'); }
     badge('relay', '中继未连接'); ui['relay-message'].textContent = '连接已断开。';
   });
   ui.copy.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(JSON.stringify({ version: '0.7.2', total, events: recent }, null, 2)); ui.copy.textContent = '已复制'; }
-    catch { ui.copy.textContent = '复制失败，请允许剪贴板访问'; }
+    try { await navigator.clipboard.writeText(JSON.stringify({ version: '0.8.0', total, events: recent }, null, 2)); ui['copy-label'].textContent = '已复制'; }
+    catch { ui['copy-label'].textContent = '复制失败，请允许剪贴板访问'; }
   });
   ui.clear.addEventListener('click', () => { recent.length = 0; renderEvents(); });
   window.addEventListener('pagehide', () => { pairGeneration++; clearInterval(heartbeat); bridge.destroy(); engine.enabled = false; controller.disconnect().catch(() => {}); });
