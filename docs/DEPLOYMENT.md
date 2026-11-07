@@ -67,6 +67,8 @@ Pages 的 `wrangler.toml` 将 `RELAY_SESSIONS` 绑定到这个 Worker。默认�
 
 控制方连接检查精确 `Origin`，App 连接使用随机 UUID 配对 ID；配对 ID 是访问会话的能力凭据，不应公开。每会话最多 8 个 App，文本帧上限 64KiB，无 App 时 5 分钟关闭控制连接。不同会话由不同 Durable Object 隔离；未知目标客户端不能跨会话转发。
 
+线上无设备协议验收：`npm run check:relay:remote`（仅创建临时测试会话与模拟 App，不输出设备指令）。
+
 本地验收：`npm run check:relay` 使用 Cloudflare 本地运行时，覆盖 Pages 路由、配对、双向 V4 消息、心跳、断开和会话隔离，不控制真实设备。SQLite Durable Objects 支持 Cloudflare Free 方案，但配额和实际费用以账号设置及 Cloudflare 官方价格为准；部署不包含升级付费方案。
 
 ## 本地 Pages 验收

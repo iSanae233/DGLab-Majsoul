@@ -57,3 +57,11 @@
 - 新增 Pages 根路径 WebSocket Function 和独立 Worker/SQLite Durable Object。普通 HTTPS 请求保留静态内容；中继不处理游戏数据和设备指令内容。
 - 27 项测试通过；check:relay 使用本地 Cloudflare 运行时验证配对、双向消息、心跳、断开通知、Origin 检查和会话隔离。Wrangler relay deploy dry-run 通过；Pages 静态资源与响应头验收通过。
 - 新界面已在本地 Chrome 查看。真实 App/主机输出仍待验收；不得把模拟 App 响应视为硬件验证。
+
+### 0.4.0 线上验收
+
+- 独立中继 Worker 已成功部署，Pages 根路径的 Function 已成功绑定 RelaySession，正式 WSS 地址为 wss://dglab-majsoul.pages.dev 。
+- 正式域名完成控制方 hello、模拟 App 配对、双向 RPC 转发、心跳和断开通知测试（check:relay:remote）。未发送设备输出指令。
+- Chrome 线上验证：新界面与默认地址、配对二维码生成、换算预览、未连接雀魂时拒绝启用、复制记录与断开连接。
+- 桌面视觉检查通过；390px 视口下 documentElement.scrollWidth=390，无横向溢出。更窄的 320px 检查因浏览器标签页被关闭未完成；临时视口已恢复默认。
+- 真实 DG-LAB App/主机仍待用户配对与实测。当前不宣称真实设备输出通过。
