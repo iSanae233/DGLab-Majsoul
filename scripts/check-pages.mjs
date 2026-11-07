@@ -42,6 +42,7 @@ try {
     assert.equal(response.headers.get('x-content-type-options'), 'nosniff', path);
     assert.equal(response.headers.get('cross-origin-opener-policy'), 'same-origin-allow-popups', path);
     assert.match(response.headers.get('content-security-policy'), /frame-ancestors 'none'/, path);
+    assert.match(response.headers.get('content-security-policy'), /manifest-src 'self'/, path);
     const body = await response.text();
     if (path === '/') assert.match(body, /DGLab-Majsoul/);
     if (path.endsWith('.user.js')) {
