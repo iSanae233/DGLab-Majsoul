@@ -15,6 +15,10 @@ test('official SDK generates V4 pairing, finite intensity/pulse tasks and scoped
   sdk.setSender(text => {
     const frame = JSON.parse(text); frames.push(frame);
     if (frame.type === 'message' && frame.data.t === 'req') {
+      if (frame.data.data?.t === 7) {
+        const current = sdk.getClient(frame.clientId)?.getDevice('slot-test');
+        if (current) current.props[frame.data.data.c === 0 ? 'intensityA' : 'intensityB'] = 0;
+      }
       queueMicrotask(() => sdk.handleMessage(JSON.stringify({ type: 'message', clientId: frame.clientId,
         data: { t: 'resp', reqId: frame.data.reqId, result: frame.data.m === 'devices.get' ? { devices: [device] } : {} } })));
     }
@@ -47,13 +51,15 @@ test('official SDK generates V4 pairing, finite intensity/pulse tasks and scoped
   assert.ok(frames.some(frame => frame.data?.m === 'device.op.clear' && frame.data.data.s === 'slot-test'));
   assert.ok(frames.some(frame => frame.data?.data?.t === 7 && frame.data.data.v === 0));
   controller.selection.channel = 'both';
+  sdk.getClient('app-test').getDevice('slot-test').props = { intensityA: 5, intensityB: 8 };
   const custom = { strategy: 'custom', maxIntensity: 10, channels: {
     A: { mode: 'permanent', delta: 20, durationMs: 0, waveform: null },
-    B: { mode: 'reset', delta: 0, durationMs: 2000, waveform: null },
+    B: { mode: 'reset', delta: 0, durationMs: 100, waveform: null },
   } };
   await controller.fire(custom);
   assert.ok(frames.some(frame => frame.data?.data?.t === 3 && frame.data.data.c === 0 && frame.data.data.v === 5));
-  assert.ok(frames.some(frame => frame.data?.data?.t === 4 && frame.data.data.c === 1 && frame.data.data.v === -8 && frame.data.data.d === 2000));
+  assert.ok(frames.some(frame => frame.data?.data?.t === 7 && frame.data.data.c === 1 && frame.data.data.v === 0));
+  assert.ok(frames.some(frame => frame.data?.data?.t === 3 && frame.data.data.c === 1 && frame.data.data.v === 8));
   await controller.stop();
   assert.ok(frames.some(frame => frame.data?.m === 'device.op.clear' && frame.data.data.c === 1));
   delete sdk.getClient('app-test').getDevice('slot-test').props.intensityB;
@@ -67,4 +73,21 @@ test('relay URL rejects insecure or credential-bearing pairing addresses', async
   for (const url of ['ws://example.com', 'wss://user:pass@example.com', 'wss://example.com?tid=someone']) {
     await assert.rejects(controller.connect(url));
   }
+});
+
+test('emergency stop cancels temporary-reset restoration', async () => {
+  const device = { type: 'COYOTE_030', props: { intensityA: 8 }, slotState: { hasDevice: true, channelA: { intensityMax: 20 } } };
+  let restored = 0;
+  const controller = new DglabController(() => {}, () => {});
+  controller.sdk = {
+    getClient: () => ({ getDevice: () => device }),
+    clearOperate: async () => {},
+    resetIntensity: async () => { device.props.intensityA = 0; },
+    addIntensity: async (_, __, ___, value) => { restored += value; },
+  };
+  controller.selection = { clientId: 'app', slotId: 'slot', channel: 0 };
+  const running = controller.fire({ strategy: 'custom', maxIntensity: 20, channels: { A: { mode: 'reset', delta: 0, durationMs: 1000, waveform: null } } });
+  await new Promise(resolve => setImmediate(resolve));
+  await controller.stop(); await running;
+  assert.equal(restored, 0); assert.equal(device.props.intensityA, 0);
 });

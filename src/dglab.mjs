@@ -5,6 +5,8 @@ export class DglabController {
   selection = null;
   sdk = null;
   active = null;
+  generation = 0;
+  resetWaiters = new Set();
   constructor(onDevices, onDisconnected, create = url => new DglabSocket({ url, responseTimeout: 15000 })) {
     this.onDevices = onDevices;
     this.onDisconnected = onDisconnected;
@@ -79,13 +81,15 @@ export class DglabController {
       const appMax = device.slotState?.[`channel${name}`]?.intensityMax;
       if (!Number.isInteger(base) || base < 0 || base > 200 || !Number.isFinite(appMax) || appMax < 0) throw new Error(`缺少 ${name} 通道强度或上限反馈`);
       const target = rule.mode === 'reset' ? 0 : Math.max(0, Math.min(base + rule.delta, plan.maxIntensity, appMax, 200));
-      return { ...rule, name, channel, delta: Math.floor(target) - base };
+      return { ...rule, name, channel, maxIntensity: plan.maxIntensity, delta: Math.floor(target) - base };
     });
     this.active = { clientId, slotId, channels: prepared.map(rule => rule.channel) };
+    const generation = ++this.generation;
     const tasks = [];
     for (const rule of prepared) {
       const options = { immediate: true, timeout: rule.durationMs + 5000 };
-      if (rule.delta !== 0) tasks.push(rule.mode === 'permanent' ?
+      if (rule.mode === 'reset') tasks.push(this.temporaryReset({ clientId, slotId, ...rule }, generation));
+      else if (rule.delta !== 0) tasks.push(rule.mode === 'permanent' ?
         this.sdk.addIntensity(clientId, slotId, rule.channel, rule.delta, options) :
         this.sdk.setTempIntensity(clientId, slotId, rule.channel, rule.delta, rule.durationMs, options));
       if (rule.waveform && rule.durationMs > 0) tasks.push(this.sdk.sendPulse(clientId, slotId, rule.channel, rule.durationMs, COYOTE_WAVEFORMS[rule.waveform].raw, options));
@@ -94,7 +98,30 @@ export class DglabController {
     await Promise.all(tasks);
     return { details: prepared.map(rule => ({ channel: rule.name, delta: rule.delta })) };
   }
+  async temporaryReset(rule, generation) {
+    const sdk = this.sdk;
+    await sdk.clearOperate(rule.clientId, { slotId: rule.slotId, channel: rule.channel });
+    if (generation !== this.generation || this.sdk !== sdk) return;
+    await sdk.resetIntensity(rule.clientId, rule.slotId, rule.channel);
+    if (generation !== this.generation || this.sdk !== sdk) return;
+    await new Promise(resolve => {
+      const waiter = { resolve, timer: null };
+      waiter.timer = setTimeout(() => { this.resetWaiters.delete(waiter); resolve(); }, rule.durationMs);
+      this.resetWaiters.add(waiter);
+    });
+    if (generation !== this.generation || this.sdk !== sdk) return;
+    const device = sdk.getClient(rule.clientId)?.getDevice(rule.slotId);
+    const base = device?.props?.[`intensity${rule.name}`];
+    const limit = device?.slotState?.[`channel${rule.name}`]?.intensityMax;
+    // Do not restore after an observed intensity change, mute, or lost feedback.
+    if (device?.slotState?.hasDevice !== true || device?.slotState?.[`channel${rule.name}`]?.isMuted === true || base !== 0 || !Number.isFinite(limit) || limit < 0) return;
+    const restore = Math.floor(Math.min(-rule.delta, rule.maxIntensity, limit, 200));
+    if (restore > 0) await sdk.addIntensity(rule.clientId, rule.slotId, rule.channel, restore, { immediate: true });
+  }
   async stop() {
+    this.generation++;
+    for (const waiter of this.resetWaiters) { clearTimeout(waiter.timer); waiter.resolve(); }
+    this.resetWaiters.clear();
     const target = this.active;
     this.active = null;
     if (!target || !this.sdk) return;

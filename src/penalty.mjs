@@ -15,6 +15,7 @@ export function penaltyFor(loss, config) {
 export class PenaltyEngine {
   enabled = false;
   busy = false;
+  generation = 0;
   seen = new Set();
   config = { per1000: 0, maxIntensity: 0, durationMs: 5000, simulation: true };
   constructor(transport, log) { this.transport = transport; this.log = log; }
@@ -22,9 +23,11 @@ export class PenaltyEngine {
     penaltyFor(1000, config);
     if (!config.simulation && !this.transport.ready()) throw new Error('请先配对并选择设备通道');
     this.config = JSON.parse(JSON.stringify(config));
+    this.generation++;
     this.enabled = true;
   }
   async stop() {
+    this.generation++;
     this.enabled = false;
     await this.transport.stop();
   }
@@ -33,7 +36,7 @@ export class PenaltyEngine {
       if (this.enabled) {
         this.enabled = false;
         this.log('联动已暂停，请在下一局开始后重新启用');
-        await this.transport.stop();
+        await this.stop();
       }
       return;
     }
@@ -47,15 +50,18 @@ export class PenaltyEngine {
     if (this.config.simulation) { this.log(command.strategy === 'custom' ? `模拟：点炮失分 ${event.loss}；${describePlan(command)}` : `模拟：点炮失分 ${event.loss}，临时强度 ${command.intensity}，${command.durationMs}ms`); return; }
     if (!this.transport.ready()) { this.enabled = false; this.log('设备不可用，已暂停'); return; }
     this.busy = true;
+    const generation = this.generation;
     try {
       this.log(command.strategy === 'custom' ? `请求：点炮失分 ${event.loss}；${describePlan(command)}` : `请求：点炮失分 ${event.loss}，临时强度上限 ${command.intensity}，${command.durationMs}ms`);
       const result = await this.transport.fire(command);
+      if (generation !== this.generation) return;
       this.log(result?.details ? `任务已返回成功；${result.details.map(item => `${item.channel} 通道下发变化 ${item.delta >= 0 ? '+' : ''}${item.delta}`).join('；')}` : result?.skipped ? 'App 通道上限为零或无有效变化，未下发任务' :
         `任务已返回成功；下发临时强度 ${result?.intensity ?? command.intensity}，${command.durationMs}ms`);
     } catch {
+      if (generation !== this.generation) return;
       this.enabled = false;
       this.log('任务失败或响应超时，已暂停；不自动重试');
-      await this.transport.stop();
+      await this.stop();
     } finally { this.busy = false; }
   }
 }
