@@ -25,6 +25,14 @@ npm run dev
 
 `wrangler.toml` 也声明了输出目录。GitHub 仓库为 `iSanae233/DGLab-Majsoul`；当前尚未部署 Pages 项目。
 
+### 避免误建为 Workers 项目
+
+Cloudflare 的“Workers & Pages”入口包含两种不同项目。如果日志中出现单独的 **Deploy command: `npx wrangler deploy`**，并报 `Missing entry-point to Worker script or to assets directory`，说明进入了 Workers 构建流程。本仓库的 `pages_build_output_dir` 配置用于 Pages，不能交给这个 Workers 部署命令。
+
+在 Cloudflare 创建 **Pages** 项目并连接本仓库，按上表填写构建命令和输出目录。Git 集成的 Pages 会在构建后自动上传静态输出，不需要添加 `npx wrangler deploy`。无需删除已有 Worker，避免误删其他配置。
+
+构建脚本识别 `WORKERS_CI=1` 后会明确报出项目类型不匹配；Pages 或通用 CI 构建缺少 HTTPS `DASHBOARD_ORIGIN` 时，也会失败，避免错误地产生信任本地地址的线上脚本。
+
 确定项目域名后，在生产构建环境中设置精确的 `DASHBOARD_ORIGIN`，例如 `https://dglab-majsoul.pages.dev`，然后构建。不要直接照抄示例域名，也不要使用通配符。
 
 本地生成正式发布物：
@@ -36,6 +44,16 @@ DASHBOARD_ORIGIN=https://你的正式域名 npm run build
 将完整 `dist/site` 作为静态产物部署。Cloudflare Pages 自动构建环境若没有设置此变量，构建会明确失败，避免发布仍信任本地地址的脚本。
 
 官方参考：[构建配置](https://developers.cloudflare.com/pages/configuration/build-configuration/)、[静态响应头](https://developers.cloudflare.com/pages/configuration/headers/)。
+
+## 本地 Pages 验收
+
+```sh
+DASHBOARD_ORIGIN=https://你的实际域名 npm run check:pages
+```
+
+该命令在 Pages 环境标记下构建，再启动锁定版本的 `wrangler pages dev`，检查首页、JS、CSS 和脚本下载的 HTTP 响应、CSP、COOP、缓存头及脚本来源绑定；结束后关闭临时服务。不会上传或部署，也不连接 DG-LAB 设备。
+
+还没有域名时，可以用保留域名 `https://pages-build-check.invalid` 进行纯本地验收。这会生成仅用于验收的脚本，不应发布或安装后用于真实联动。检查结束后用实际域名重建，或运行 `npm run build` 恢复本地开发构建。
 
 ## 用户使用流程
 

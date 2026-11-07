@@ -8,7 +8,8 @@
     "build": "node scripts/build.mjs",
     "test": "node --test test/*.test.mjs",
     "dev": "npm run build && npm run preview",
-    "preview": "python3 -m http.server 4173 --bind 127.0.0.1 --directory dist/site"
+    "preview": "python3 -m http.server 4173 --bind 127.0.0.1 --directory dist/site",
+    "check:pages": "node scripts/check-pages.mjs"
   },
   "dependencies": {
     "dglab-kit": "1.0.5",
@@ -17,6 +18,7 @@
   },
   "devDependencies": {
     "esbuild": "0.28.2",
-    "linkedom": "0.18.15"
+    "linkedom": "0.18.15",
+    "wrangler": "4.158.0"
   }
 }

@@ -31,3 +31,20 @@
 - 已验证带路径的非法可信来源、Pages 构建缺失 DASHBOARD_ORIGIN 会被拒绝。
 - 浏览器预览工具本次超时，无法完成视觉验证。尚未实测 0.3.0 用户脚本与真实雀魂页面之间的桥接、真实 App/主机输出。
 - 构建输出 dist/site，Cloudflare Pages 配置与本地运行方法见 DEPLOYMENT.md。用户要求先完成代码与配置，本次未进行线上部署。
+
+## Cloudflare 构建与部署模式检查（2026-11-07）
+
+通过 Google Chrome 的 Cloudflare 构建日志确认：提交 5257c75 的 `npm run build` 已成功；失败发生在 Workers 项目的 `npx wrangler deploy`，报 `Missing entry-point to Worker script or to assets directory`。原构建还回落到了本地可信来源，不可直接用作线上脚本。
+
+本地改动：明确拒绝 Workers Builds；Pages/通用 CI 缺少 HTTPS DASHBOARD_ORIGIN 时提前失败；新增锁定 Wrangler 4.158.0 的 check:pages 命令。
+
+已验证：
+
+- 在独立临时目录，Node 22.23.4 从 package-lock.json 干净安装依赖。
+- 27 项测试通过，包括构建环境与来源验证回归。
+- CF_PAGES=1、保留域名 https://pages-build-check.invalid 的构建通过。
+- 使用 Wrangler 4.158.0 的 pages dev 启动本地 Pages 服务；首页、app.js、style.css、脚本下载均返回 200。
+- 校验真实 Pages 服务返回的 CSP、COOP、nosniff、脚本 no-store，以及脚本的精确可信来源与独立副本一致性。
+- 临时 Pages 服务在验收结束后关闭。原工作目录最终恢复本地开发构建。
+
+环境为 macOS arm64 + Node 22，并非 Cloudflare 的完整 Linux 构建镜像。未修改云端项目或触发部署；检查域名为保留域名，不代表真实站点。0.3.0 的真实浏览器桥接和设备输出仍未验收。

@@ -26,6 +26,8 @@ npm run dev
 DASHBOARD_ORIGIN=https://你的正式域名 npm run build
 ```
 
+本地 Pages 验收可运行 `DASHBOARD_ORIGIN=https://你的实际域名 npm run check:pages`，使用 Wrangler 实际检查静态资源与响应头。
+
 Cloudflare Pages 构建命令为 `npm run build`，输出目录为 `dist/site`，并在构建环境设置 `DASHBOARD_ORIGIN`。详见 [部署与信任配置](docs/DEPLOYMENT.md)。当前没有执行线上部署。
 
 ## 使用流程
