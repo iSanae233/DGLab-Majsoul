@@ -23,7 +23,10 @@ export const dashboardMarkup = `
 <div class="add-event-row"><label class="field" for="new-trigger">触发事件<select id="new-trigger"></select></label><button id="add-rule" class="secondary" type="button">${icon('plus')}添加事件</button></div>
 <div class="rules-list-heading"><h3>已创建的规则</h3><span id="rule-count">0 条</span></div>
 <div id="rule-list" class="rules-list"></div><p id="rules-save-note" class="field-help">规则自动保存在此浏览器。</p>
-<details class="rule-notes"><summary>关于强度与连续触发</summary><p class="field-help">临时变化到期撤销；永久变化保留并可能累积。真实输出繁忙时跳过连续触发，不排队叠加。每个事件只需添加一次，可随时编辑、停用或删除。</p></details>
+<details class="rule-notes"><summary>关于强度与连续触发</summary>
+<p class="field-help">强度临时变化按设置的惩罚时长持续，到期后恢复原强度</p>
+<p class="field-help">强度永久变化按触发规则变化，一直生效直至其他规则生效</p>
+<p class="field-help">每种事件只需添加一次，可随时编辑、暂停或删除</p></details>
 <label class="simulation-toggle"><input id="simulation" type="checkbox" checked><span class="simulation-icon" aria-hidden="true">${icon('shield')}</span><span><strong>仅模拟（不发送指令）</strong></span><span class="toggle-track" aria-hidden="true"></span></label>
 </section>
 <section class="card" id="game-section"><div class="section-heading"><span class="section-symbol">${icon('tiles')}</span><div><h2>进入雀魂</h2></div></div>

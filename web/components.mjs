@@ -11,4 +11,4 @@ export const sceneMarkup = `<div class="hero-art" aria-hidden="true">
   <span class="art-coordinate coordinate-bottom">THE NEXT MOVE IS YOURS.</span>
 </div>`;
 
-export const footerMarkup = `<footer><div class="footer-links"><a class="footer-brand" href="/"><img src="/assets/brand.svg" width="24" height="28" alt="">DGLab-Majsoul <span class="muted">/ v0.9.0</span></a><a class="repository-link" href="https://github.com/iSanae233/DGLab-Majsoul" target="_blank" rel="noopener noreferrer">${icon('github')}<span>GitHub 仓库</span>${icon('arrow')}</a></div><span class="footer-motto">YOUR GAME. YOUR RULES. YOUR LIMITS.</span></footer>`;
+export const footerMarkup = `<footer><div class="footer-links"><a class="footer-brand" href="/"><img src="/assets/brand.svg" width="24" height="28" alt="">DGLab-Majsoul <span class="muted">/ v0.9.1</span></a><a class="repository-link" href="https://github.com/iSanae233/DGLab-Majsoul" target="_blank" rel="noopener noreferrer">${icon('github')}<span>GitHub 仓库</span>${icon('arrow')}</a></div><span class="footer-motto">YOUR GAME. YOUR RULES. YOUR LIMITS.</span></footer>`;
