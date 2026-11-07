@@ -33,4 +33,11 @@ test('dashboard mounts defaults and cannot arm without the game bridge', async (
   document.querySelector('#stop').dispatchEvent(new domWindow.Event('click'));
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(document.querySelector('#operation-status').textContent, '联动已暂停');
+  document.querySelector('#pair-link').value = 'test-only-pairing';
+  document.querySelector('#pairing').hidden = false;
+  document.querySelector('#relay-address').dispatchEvent(new domWindow.Event('change'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(document.querySelector('#pair-link').value, '');
+  assert.equal(document.querySelector('#pairing').hidden, true);
+  assert.equal(document.querySelector('#show-pairing').hidden, true);
 });

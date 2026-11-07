@@ -79,6 +79,7 @@ time { color: #71859a; font-family: ui-monospace, monospace; font-size: 10px; }
 .empty-operation { color: #677b92; }
 .event-heading { display: flex; justify-content: space-between; align-items: center; margin-top: 26px; }
 .text-button { background: none; border: none; color: #7c91a8; padding: 0; font-size: 10px; }
+.pairing-toggle { margin-top: 14px; text-decoration: underline; }
 .text-button:hover { background: none; color: #c3d4e5; }
 .event-list { min-height: 280px; max-height: 460px; overflow: auto; }
 .empty-state { min-height: 250px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: #677b92; font-size: 12px; }
@@ -95,5 +96,5 @@ time { color: #71859a; font-family: ui-monospace, monospace; font-size: 10px; }
 footer { display: flex; justify-content: space-between; padding: 25px 0; margin-top: 30px; border-top: 1px solid var(--line); color: #667c94; font-size: 10px; }
 [hidden] { display: none !important; }
 @media (max-width: 900px) { .console { padding: 0 22px; } .workspace { grid-template-columns: minmax(0, 1fr); } .activity-card { min-height: auto; } .hero { align-items: start; } .hero .button { max-width: 200px; line-height: 1.7; } }
-@media (max-width: 560px) { .console { padding: 0 16px; } .topbar { height: 68px; } .top-note { display: none; } .hero { flex-direction: column; padding: 30px 0 24px; gap: 20px; } .hero .button { max-width: none; width: 100%; } .card { padding: 20px 16px; } .status-strip { gap: 15px; padding: 14px; } .event-counter { margin-left: 0; } .three-columns { grid-template-columns: 1fr; } .two-columns { gap: 12px; } .game-launch { flex-direction: column; align-items: stretch; } .game-launch .field { flex: auto; } .control-actions { flex-direction: column; } .pairing { grid-template-columns: 1fr; } .pairing img { margin: auto; } footer { gap: 14px; line-height: 1.7; } }
+@media (max-width: 560px) { .console { padding: 0 16px; } .topbar { height: 68px; } .top-note { display: none; } .hero { flex-direction: column; padding: 30px 0 24px; gap: 20px; } .hero .button { max-width: none; width: 100%; } .card { padding: 20px 16px; } .status-strip { gap: 15px; padding: 14px; } .event-counter { margin-left: 0; } .three-columns { grid-template-columns: 1fr; } .two-columns { gap: 12px; } .game-launch { flex-direction: column; align-items: stretch; } .game-launch .field { flex: auto; } .control-actions, .button-row { flex-direction: column; } .pairing { grid-template-columns: 1fr; } .pairing img { margin: auto; } footer { gap: 14px; line-height: 1.7; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

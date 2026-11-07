@@ -6,6 +6,7 @@ export const dashboardMarkup = `
 <section class="card"><div class="section-heading"><span class="step">01</span><div><h2>连接设备</h2><p>通过 DG-LAB 4 App 扫码，选择本次使用的设备。</p></div></div>
 <label class="field" for="relay-address">V4 中继地址<input id="relay-address" type="url" value="wss://dglab-majsoul.pages.dev" spellcheck="false" autocomplete="off"></label>
 <div class="button-row"><button id="pair" class="primary">连接并生成配对二维码</button><button id="disconnect" class="quiet">断开 App</button></div>
+<button id="show-pairing" class="text-button pairing-toggle" hidden>显示配对二维码</button>
 <p id="relay-message" class="field-help" role="status">连接成功后会在下方显示配对二维码。</p>
 <div id="pairing" class="pairing" hidden><img id="qr-image" alt="App 配对二维码" hidden><div><h3>使用 App 扫码配对</h3><p>打开 App 的 Socket 功能进行扫描。请勿公开配对链接。</p><label class="field" for="pair-link">配对链接<textarea id="pair-link" readonly rows="3" hidden></textarea></label></div></div>
 <div class="two-columns"><label class="field" for="device">目标设备<select id="device"><option value="">等待 App 接入</option></select></label><label class="field" for="channel">输出通道<select id="channel"><option value="0">A 通道</option><option value="1">B 通道</option></select></label></div>

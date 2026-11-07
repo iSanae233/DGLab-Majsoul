@@ -48,6 +48,7 @@ const clearPairing = () => {
   if (!ui.pairing) return;
   ui.pairing.hidden = ui['qr-image'].hidden = ui['pair-link'].hidden = true;
   ui['pair-link'].value = ''; ui['qr-image'].removeAttribute('src');
+  ui['show-pairing'].hidden = true;
 };
 const controller = new DglabController(list => {
   devices = list;
@@ -56,7 +57,12 @@ const controller = new DglabController(list => {
   ui.device.replaceChildren(new Option(list.length ? '选择设备' : '等待 App 接入', ''));
   list.forEach(device => ui.device.append(new Option(device.name, JSON.stringify([device.clientId, device.slotId]))));
   if (list.some(device => JSON.stringify([device.clientId, device.slotId]) === selected)) ui.device.value = selected;
-  if (list.length) badge('relay', `已发现 ${list.length} 台设备`, true);
+  if (list.length) {
+    badge('relay', `已发现 ${list.length} 台设备`, true);
+    ui['relay-message'].textContent = 'App 已接入，请选择目标设备与通道。';
+    ui.pairing.hidden = true;
+    ui['show-pairing'].hidden = !ui['pair-link'].value;
+  }
 }, () => {
   clearPairing(); badge('relay', '中继或设备已断开');
   engine.stop().catch(() => log('连接中断；请在 App 确认停止'));
@@ -81,6 +87,14 @@ function mount() {
   ui.simulation.checked = true;
   GAME_URLS.forEach((url, i) => ui.server.append(new Option(['繁中服', '日服', '国际服'][i], url)));
   ui['open-game'].addEventListener('click', () => { try { bridge.open(ui.server.value); } catch (error) { log(error.message); } });
+  ui['show-pairing'].addEventListener('click', () => { ui.pairing.hidden = !ui.pairing.hidden; });
+  ui['relay-address'].addEventListener('change', async () => {
+    pairGeneration++; clearPairing(); engine.enabled = false;
+    ui.pair.disabled = false; ui.pair.textContent = '连接并生成配对二维码';
+    try { await controller.disconnect(); log('中继地址已更改，请重新连接'); } catch { log('停止未确认，请在 App 手动停止'); }
+    badge('relay', '中继未连接');
+    ui['relay-message'].textContent = '地址已修改，等待重新连接。';
+  });
   ui.pair.addEventListener('click', async () => {
     const generation = ++pairGeneration;
     clearPairing(); ui.pair.disabled = true; ui.pair.textContent = '正在连接…';
