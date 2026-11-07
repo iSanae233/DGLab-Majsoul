@@ -6,3 +6,5 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=()
 /userscripts/*
   Cache-Control: no-store
+/link/*
+  ! Cross-Origin-Opener-Policy

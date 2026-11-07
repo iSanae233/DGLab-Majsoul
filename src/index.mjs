@@ -6,12 +6,13 @@ const recent = [];
 let output;
 let status;
 const operationLog = [];
-const VERSION = '0.5.0';
+const VERSION = '0.5.1';
 const bridge = new GameBridge(window, __DASHBOARD_ORIGIN__, text => {
   operationLog.push(text);
   if (operationLog.length > 5) operationLog.shift();
   if (status) status.textContent = operationLog.join('\n');
 });
+bridge.version = VERSION;
 installCapture(window, () => new ProtocolSession(), event => {
   const record = { time: new Date().toISOString(), ...event };
   recent.push(record);

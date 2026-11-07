@@ -120,8 +120,12 @@ export class GameBridge {
     if (data.kind === 'hello') {
       // A different controller session requires a new game page; never silently switch.
       if (this.session && this.session !== data.session) return;
+      const fresh = this.session !== data.session;
       this.session = data.session; this.lastHello = this.now();
       this.send({ kind: 'ack' });
+      if (fresh && this.version && !this.pending.some(event => event.type === 'script-ready')) {
+        this.publish({ type: 'script-ready', connection: 0, version: this.version, time: new Date(this.now()).toISOString() });
+      }
       for (const pending of this.pending.splice(0)) this.publish(pending);
     } else if (data.kind === 'status' && data.session === this.session && data.instance === this.instance && typeof data.text === 'string') {
       this.onStatus(data.text.slice(0, 500));
@@ -144,7 +148,7 @@ export class GameBridge {
   }
   connectDashboard() {
     this.stop();
-    const controller = this.scope.open(this.origin, '_blank');
+    const controller = this.scope.open(`${this.origin}/link/`, '_blank');
     if (!controller) throw new Error('浏览器阻止了控制台弹窗，请允许后重试');
     this.controller = controller; this.session = null;
     this.requestLink();

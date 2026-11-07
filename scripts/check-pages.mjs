@@ -52,6 +52,12 @@ try {
     console.log(`PASS ${path}: HTTP 200 and Pages headers`);
   }
   console.log('PASS Wrangler Pages static assets, origin binding and _headers');
+  const reverse = await fetch(url + '/link/', { signal: AbortSignal.timeout(10000) });
+  assert.equal(reverse.status, 200);
+  assert.equal(reverse.headers.get('cross-origin-opener-policy'), null);
+  assert.match(reverse.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+  assert.match(await reverse.text(), /DGLab-Majsoul/);
+  console.log('PASS dedicated reverse-link entry retains CSP and permits its opener');
 } finally {
   server.kill('SIGTERM');
   if (exitCode === undefined) await Promise.race([once(server, 'exit'), new Promise(resolve => setTimeout(resolve, 3000))]);

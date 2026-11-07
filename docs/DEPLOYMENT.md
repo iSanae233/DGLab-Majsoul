@@ -105,3 +105,7 @@ DASHBOARD_ORIGIN=https://你的实际域名 npm run check:pages
 `web/_headers` 配置 CSP、禁止嵌入和缓存策略。`same-origin-allow-popups` 用于保留本控制台主动打开的跨源窗口，不要改成 `same-origin` 后仍假定桥接可用。CSP 的 `connect-src wss:` 允许用户自选 WSS 中继；控制台仅在用户点击连接后发起连接。
 
 断开、超时或刷新会停用联动，重新握手不会自动恢复真实输出。两端心跳超时为 90 秒；设备任务期限最多 10 秒。网络或标签页被强制关闭时不能保证停止请求送达，应能在 App 或设备端手动停止。
+
+### 反向关联专用入口
+
+游戏内按钮打开同一来源下的 `/link/`。普通首页保留 `same-origin-allow-popups`，仅 `/link/*` 移除 COOP，以防浏览器清空由游戏打开的控制台的 opener。CSP、禁止嵌入以及 origin/source/session 校验仍保留。不更改浏览器全局安全设置；不要把这个例外扩展到其他来源或所有路径。

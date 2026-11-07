@@ -18,10 +18,12 @@ const header = `// ==UserScript==
 // ==/UserScript==`;
 await rm('dist', { recursive: true, force: true });
 await mkdir('dist/site/userscripts', { recursive: true });
+await mkdir('dist/site/link', { recursive: true });
 const common = { bundle: true, platform: 'browser', target: ['chrome110', 'firefox115'], legalComments: 'inline', minify: false };
 await build({ ...common, entryPoints: ['src/index.mjs'], format: 'iife', outfile: 'dist/dglab-majsoul.user.js',
   define: { __DASHBOARD_ORIGIN__: JSON.stringify(origin) }, banner: { js: header } });
 await cp('dist/dglab-majsoul.user.js', 'dist/site/userscripts/dglab-majsoul.user.js');
 await build({ ...common, entryPoints: ['web/main.mjs'], format: 'esm', outfile: 'dist/site/app.js' });
 for (const file of ['index.html', 'style.css', '_headers', '_routes.json']) await cp(`web/${file}`, `dist/site/${file}`);
+await cp('web/index.html', 'dist/site/link/index.html');
 console.log(`Built ${version}; trusted dashboard: ${origin}; Pages output: dist/site`);
