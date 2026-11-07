@@ -10,7 +10,8 @@ import schema from '../src/protocol/liqi.json' with { type: 'json' };
 test('official SDK generates V4 pairing, finite intensity/pulse tasks and scoped stop', async () => {
   const frames = [];
   const sdk = new DglabSocket();
-  const device = { slotId: 'slot-test', name: 'Mock Coyote', type: 'COYOTE_030', slotState: { hasDevice: true, channelA: { intensityMax: 12 } } };
+  const device = { slotId: 'slot-test', name: 'Mock Coyote', type: 'COYOTE_030', props: { intensityA: 5, intensityB: 8 },
+    slotState: { hasDevice: true, channelA: { intensityMax: 12 }, channelB: { intensityMax: 20 } } };
   sdk.setSender(text => {
     const frame = JSON.parse(text); frames.push(frame);
     if (frame.type === 'message' && frame.data.t === 'req') {
@@ -40,11 +41,25 @@ test('official SDK generates V4 pairing, finite intensity/pulse tasks and scoped
     for (const event of session.feed('in', frame)) await engine.handle({ connection: 1, ...event });
   }
   const operations = frames.filter(frame => frame.data?.m === 'device.op').map(frame => frame.data.data);
-  assert.ok(operations.some(op => op.t === 4 && op.v === 12 && op.d === 5000 && op.c === 0 && op.s === 'slot-test'));
+  assert.ok(operations.some(op => op.t === 4 && op.v === 7 && op.d === 5000 && op.c === 0 && op.s === 'slot-test'));
   assert.ok(operations.some(op => op.t === 0 && op.d === 5000 && Array.isArray(op.v) && op.v.length));
   await controller.stop();
   assert.ok(frames.some(frame => frame.data?.m === 'device.op.clear' && frame.data.data.s === 'slot-test'));
   assert.ok(frames.some(frame => frame.data?.data?.t === 7 && frame.data.data.v === 0));
+  controller.selection.channel = 'both';
+  const custom = { strategy: 'custom', maxIntensity: 10, channels: {
+    A: { mode: 'permanent', delta: 20, durationMs: 0, waveform: null },
+    B: { mode: 'reset', delta: 0, durationMs: 2000, waveform: null },
+  } };
+  await controller.fire(custom);
+  assert.ok(frames.some(frame => frame.data?.data?.t === 3 && frame.data.data.c === 0 && frame.data.data.v === 5));
+  assert.ok(frames.some(frame => frame.data?.data?.t === 4 && frame.data.data.c === 1 && frame.data.data.v === -8 && frame.data.data.d === 2000));
+  await controller.stop();
+  assert.ok(frames.some(frame => frame.data?.m === 'device.op.clear' && frame.data.data.c === 1));
+  delete sdk.getClient('app-test').getDevice('slot-test').props.intensityB;
+  const count = frames.length;
+  await assert.rejects(controller.fire(custom), /缺少 B 通道/);
+  assert.equal(frames.length, count, 'all channels are validated before sending any command');
   await controller.disconnect();
 });
 test('relay URL rejects insecure or credential-bearing pairing addresses', async () => {

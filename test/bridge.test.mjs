@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import { DashboardBridge, GameBridge, validEvent } from '../src/bridge.mjs';
 
-function setup() {
+function setup(beforeOpen) {
   let now = 100000;
   const events = [], states = [], statuses = [];
   const dashboard = { crypto: webcrypto, addEventListener() {}, removeEventListener() {} };
@@ -14,6 +14,7 @@ function setup() {
   dashboard.open = () => gameWindow;
   const dm = new DashboardBridge(dashboard, e => events.push(e), s => states.push(s), () => now);
   const gm = new GameBridge(game, 'https://control.example', s => statuses.push(s), () => now);
+  beforeOpen?.(gm);
   dm.open('https://game.maj-soul.com/1/');
   return { dm, gm, gameWindow, dashboardWindow, events, states, statuses, advance: ms => { now += ms; } };
 }
@@ -59,4 +60,30 @@ test('closed game disconnects and stale deal-in never triggers an operation', ()
 test('unknown game URLs cannot be opened', () => {
   const { dm, gameWindow } = setup(); gameWindow.closed = true;
   assert.throws(() => dm.open('https://evil.example'));
+});
+
+test('pre-handshake diagnostics are delivered but historical punishments are never buffered', () => {
+  const { events } = setup(gm => {
+    gm.publish({ type: 'script-ready', connection: 0, version: '0.5.0' });
+    gm.publish({ type: 'connection-observed', connection: 1 });
+    gm.publish({ type: 'deal-in', connection: 1, me: 0, round: '0:0:0', step: 3, loss: 8000 });
+  });
+  assert.deepEqual(events.map(event => event.type), ['script-ready', 'connection-observed']);
+});
+test('shortcut settings and stop requests require the paired source', () => {
+  const { dm, gm, statuses } = setup(); let stops = 0;
+  dm.onStop = () => { stops++; };
+  dm.configureStopKey('F9'); assert.equal(gm.stopKey, 'F9');
+  gm.stop(); assert.equal(stops, 1); assert.equal(statuses.length, 0);
+});
+test('a directly opened game can open and associate its trusted dashboard', () => {
+  let dm, gm;
+  const events = [];
+  const gameWindow = { closed: false, postMessage: data => gm.receive({ source: dashboardWindow, origin: 'https://control.example', data }) };
+  const dashboardWindow = { closed: false, postMessage: data => dm.receive({ source: gameWindow, origin: 'https://game.maj-soul.com', data }) };
+  dm = new DashboardBridge({ crypto: webcrypto, opener: gameWindow, addEventListener() {}, removeEventListener() {} }, e => events.push(e), () => {});
+  gm = new GameBridge({ crypto: webcrypto, opener: null, open: () => dashboardWindow, addEventListener() {}, removeEventListener() {} }, 'https://control.example', () => {});
+  gm.connectDashboard(); assert.equal(dm.connected, true);
+  gm.publish({ type: 'discard', connection: 1, seat: 0, tile: '1m' });
+  assert.equal(events[0].type, 'discard');
 });

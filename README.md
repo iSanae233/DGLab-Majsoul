@@ -2,7 +2,7 @@
 
 雀魂网页版的点炮联动：Cloudflare Pages 控制台负责配对 DG-LAB App 4、设置规则和执行惩罚；Tampermonkey 脚本负责采集牌局事件，并在雀魂右上角的可展开窗口显示事件和操作结果。
 
-当前为 0.4.0 开发版。0.3.0 已成功部署至 Pages，0.4.0 新增独立中继与新版界面；真实 App/主机输出仍待实测。默认模拟、停用，换算系数和强度上限为 0。
+当前为 0.5.0 开发版。已部署独立中继与控制台；真实 App/主机输出仍待实测。默认模拟、停用，换算系数和强度上限为 0。
 
 ## 运行与部署
 
@@ -35,20 +35,34 @@ Cloudflare Pages 构建命令为 `npm run build`，输出目录为 `dist/site`�
 1. 在浏览器安装 Tampermonkey，再从控制台安装脚本。
 2. 在控制台连接 V4 WSS 中继，用 DG-LAB 4 App 扫二维码，选择设备和 A/B 通道。
 3. 配置每 1000 点强度、强度上限和固定时长，先保留模拟。
-4. 从控制台点击“打开雀魂并连接脚本”，等待桥接成功，再应用设置并启用。
+4. 可以从控制台打开雀魂，也可以先打开雀魂、点击游戏小窗口中的“打开并关联控制台”；等待桥接成功后再启用。
 5. 控制台保持打开。雀魂右上角小窗口显示事件，以及控制台返回的模拟、输出、停止和失败信息。
 
 脚本匹配繁中、日服和国际服的三个网页域名；匹配范围不等于全部地区已实测。当前设备控制限定 App 暴露的 `COYOTE_030`（郊狼 3.0 主机），App 4 的版本与主机型号不是同一概念。
 
-必须从控制台打开雀魂；直接进入雀魂只能本地观察，无法交给控制台执行。刷新控制台需重新配对并重新打开游戏窗口。刷新雀魂或连接中断后需重新启用；历史恢复动作不触发惩罚。
+两种方式都通过浏览器窗口引用进行精确来源的 postMessage 握手，不会自动控制任意已打开的标签页。直接打开雀魂时，点击游戏内的“打开并关联控制台”。刷新控制台后可从游戏窗口重新关联，再配对设备。刷新雀魂或连接中断后需重新启用；历史恢复动作不触发惩罚。
 
-## 点炮规则
+## 用户自定义惩罚（默认）
+
+第 02 区参考官方 T-Rex Demo 的指令设置，支持：
+
+- 强度临时变化：相对当前基础强度增加或减少，任务结束撤销临时变化。
+- 强度永久变化：增加或减少基础强度，可能随点炮次数累积；停止或断开等保护动作会归零。
+- 强度临时归零：在指定时长内将当前基础强度抵消为零，结束后撤销临时抵消。
+- 覆盖波形：选择内置郊狼波形，或保持 App 当前波形。
+- A/B 同步规则或独立规则，可指定单通道或 A+B。
+- 0.1–60 秒时长；永久变化可设 0 秒，仅立即改变强度、不发送波形。
+- F7/F8/F9/F10/Escape 快捷停止，控制台及已关联的雀魂页面均可使用。
+
+默认变化为 0、上限为 0，不会自动启用。自定义强度变化范围为 -40 至 +40；还会根据 App 的当前强度和通道上限约束下发变化。缺少强度反馈时拒绝输出。它不接收任意代码或可执行公式。
+
+## 点数换算（可选）
 
 ```text
 临时强度 = min(用户上限, ceil(实际失分 / 1000 × 每1000点强度))
 ```
 
-最终下发值再受 App 上报的通道 `intensityMax` 限制。固定时长范围 100–10000ms，点数只影响强度。换算向上取整，达到上限后不再增加。不提供适用于所有人的默认输出强度。
+最终下发值再受 App 上报的通道 `intensityMax` 限制。点数换算模式的固定时长范围 100–10000ms，点数只影响强度。换算向上取整，达到上限后不再增加。不提供适用于所有人的默认输出强度。
 
 点炮金额使用服务器 `ActionHule.delta_scores[me]` 的负值绝对值。本场和多家荣和以实际扣分合计为准；不手工重算番符，也不把和牌方拿到的供托当成点炮者额外支付。此前已经扣除的立直棒不重复计算。
 
@@ -82,6 +96,8 @@ Cloudflare Pages 构建命令为 `npm run build`，输出目录为 `dist/site`�
 
 ## 日志与隐私
 
+LIVE ACTIVITY 会显示“脚本就绪”、脚本版本、连接事件和真实牌局事件；握手前只补发诊断，不重放历史点炮。
+
 两个页面各保留最近 100 条规范化事件；雀魂窗口展示最近 10 条事件和 5 条操作文字。控制台可以复制最近事件。
 
 事件不包含账号 ID、认证 token、原始二进制消息或私有手牌。配对链接和设备凭据留在控制台，不传给雀魂、不放入雀魂 URL、不持久化。只有设备控制指令发送给选定中继。
@@ -99,6 +115,7 @@ Cloudflare Pages 构建命令为 `npm run build`，输出目录为 `dist/site`�
 - [hyperzlib/Coyote-Majsoul](https://github.com/hyperzlib/Coyote-Majsoul)：项目起点、联动思路、Liqi 协议描述及 ActionPrototype 混淆解析参考。
 - [HomeArchbishop/majsoul-analyser](https://github.com/HomeArchbishop/majsoul-analyser)：原项目基于的协议解析与事件处理工作。
 - [Sunalamye/Naki](https://github.com/Sunalamye/Naki)：Unity 网页端、WebSocket 与协议恢复的调查文档参考，未复制其实现。
+- [DG-LAB T-Rex Demo](https://trex.dungeon-lab.cn/)：自定义强度变化、覆盖波形、时长及快捷停止交互的参考。
 - [dungeonlab-open/dglab-websocket-server](https://github.com/dungeonlab-open/dglab-websocket-server) 和 [dungeonlab-open/dglab-kit](https://github.com/dungeonlab-open/dglab-kit)：官方 V4 协议参考与 SDK。
 - [protobuf.js](https://github.com/protobufjs/protobuf.js)、[esbuild](https://github.com/evanw/esbuild)、[qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 和 [Tampermonkey](https://www.tampermonkey.net/)：协议解析、构建、二维码和运行环境。
 

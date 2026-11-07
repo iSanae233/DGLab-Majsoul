@@ -2,12 +2,13 @@ import qrcode from 'qrcode-generator';
 import { DglabController } from '../src/dglab.mjs';
 import { PenaltyEngine, penaltyFor } from '../src/penalty.mjs';
 import { DashboardBridge, GAME_URLS } from '../src/bridge.mjs';
+import { WAVEFORMS, describePlan } from '../src/rules.mjs';
 import { dashboardMarkup } from './layout.mjs';
 
 const recent = [], operations = [];
 let total = 0, devices = [], pairGeneration = 0;
 const ui = {};
-const labels = { discard: '弃牌', riichi: '立直', meld: '吃碰杠', kan: '杠', win: '和牌', 'deal-in': '点炮结算',
+const labels = { 'script-ready': '脚本就绪', discard: '弃牌', riichi: '立直', meld: '吃碰杠', kan: '杠', win: '和牌', 'deal-in': '点炮结算',
   'round-start': '新一局', 'game-start': '进入对局', resync: '恢复对局', 'north-extraction': '拔北',
   'exhaustive-draw': '荒牌流局', 'abortive-draw': '途中流局', 'game-end': '对局结束',
   'connection-observed': '发现游戏连接', 'connection-closed': '游戏连接关闭', 'capture-error': '解析异常', 'protocol-error': '协议异常' };
@@ -28,7 +29,7 @@ function renderEvents() {
     const item = document.createElement('li'); item.className = 'event-row';
     const time = document.createElement('time'); time.textContent = new Date(event.time).toLocaleTimeString('zh-CN', { hour12: false });
     const title = document.createElement('strong'); title.textContent = labels[event.type] || event.type;
-    const detail = document.createElement('span'); detail.textContent = event.loss ? `实际失分 ${event.loss.toLocaleString()} 点` :
+    const detail = document.createElement('span'); detail.textContent = event.type === 'script-ready' ? `脚本版本 ${event.version || '未知'}` : event.loss ? `实际失分 ${event.loss.toLocaleString()} 点` :
       event.tile ? `座位 ${event.seat} · ${event.tile}` : event.round ? `局标识 ${event.round}` : `连接 ${String(event.connection).split(':').at(-1)}`;
     item.append(time, title, detail); return item;
   }));
@@ -72,9 +73,11 @@ const engine = new PenaltyEngine(controller, log);
 const bridge = new DashboardBridge(window, event => {
   const record = { time: new Date().toISOString(), ...event };
   total++; recent.push(record); if (recent.length > 100) recent.shift(); renderEvents();
+  if (ui['activity-health']) ui['activity-health'].textContent = `脚本事件已接收 · 最近 ${new Date(record.time).toLocaleTimeString('zh-CN', { hour12: false })}${record.type === 'script-ready' ? ` · 版本 ${record.version}` : ''}`;
   engine.handle(record).catch(() => log('停止未确认，请在 App 手动停止'));
 }, message => {
   if (ui['connection-status']) ui['connection-status'].textContent = message;
+  if (ui['activity-health']) ui['activity-health'].textContent = message;
   engine.stop().then(() => log(message)).catch(() => log('停止未确认，请在 App 手动停止'));
 });
 const heartbeat = setInterval(() => {
@@ -84,8 +87,12 @@ function mount() {
   const root = document.createElement('main'); root.className = 'console'; root.innerHTML = dashboardMarkup;
   document.body.append(root);
   root.querySelectorAll('[id]').forEach(element => { ui[element.id] = element; });
-  ui.simulation.checked = true;
-  GAME_URLS.forEach((url, i) => ui.server.append(new Option(['繁中服', '日服', '国际服'][i], url)));
+  ui.simulation.checked = true; ui['sync-channels'].checked = true;
+  for (const select of [ui.waveform, ui['waveform-b']]) WAVEFORMS.forEach(wave => select.append(new Option(wave.label, wave.value)));
+  const emergencyStop = () => engine.stop().then(() => log('快捷停止：联动已暂停')).catch(error => log(error.message));
+  bridge.onStop = emergencyStop;
+  window.addEventListener('keydown', event => { if (!event.repeat && event.key === ui['stop-key'].value) { event.preventDefault(); emergencyStop(); } });
+  GAME_URLS.forEach((url, i) => { const option = new Option(['繁中服', '日服', '国际服'][i], url); option.selected = i === 0; ui.server.append(option); });
   ui['open-game'].addEventListener('click', () => { try { bridge.open(ui.server.value); } catch (error) { log(error.message); } });
   ui['show-pairing'].addEventListener('click', () => { ui.pairing.hidden = !ui.pairing.hidden; });
   ui['relay-address'].addEventListener('change', async () => {
@@ -117,14 +124,34 @@ function mount() {
       if (generation === pairGeneration) { ui.pair.disabled = false; ui.pair.textContent = '连接并生成配对二维码'; }
     }
   });
-  const config = () => ({ per1000: Number(ui.rate.value), maxIntensity: Number(ui.maximum.value), durationMs: Number(ui.duration.value), simulation: ui.simulation.checked });
-  const preview = () => {
-    try { const result = penaltyFor(8000, config()); ui['rule-preview'].textContent = `临时强度 ${result.intensity} · ${(result.durationMs / 1000).toLocaleString()} 秒`; }
-    catch { ui['rule-preview'].textContent = '请先设置有效的换算系数、上限和时长'; }
+  const readChannel = suffix => ({ mode: ui[`strength-mode${suffix}`].value,
+    delta: Number(ui[`strength-delta${suffix}`].value), durationMs: Math.round(Number(ui[`custom-seconds${suffix}`].value) * 1000),
+    waveform: ui[`waveform${suffix}`].value || null });
+  const config = () => {
+    const common = { strategy: ui.strategy.value, maxIntensity: Number(ui.maximum.value), simulation: ui.simulation.checked };
+    if (common.strategy === 'custom') return { ...common, syncChannels: ui['sync-channels'].checked,
+      targetChannel: ui.channel.value === 'both' ? 'both' : ui.channel.value === '1' ? 'B' : 'A',
+      channels: { A: readChannel(''), B: readChannel('-b') } };
+    if (ui.channel.value === 'both') throw new Error('按失分换算时请选择单个通道，或使用自定义 A+B 指令');
+    return { ...common, per1000: Number(ui.rate.value), durationMs: Number(ui.duration.value) };
   };
-  for (const input of [ui.device, ui.channel, ui.rate, ui.maximum, ui.duration, ui.simulation]) {
-    input.addEventListener('input', () => { preview(); if (engine.enabled) engine.stop().then(() => log('设置已改变，请重新启用')).catch(() => log('请在 App 手动停止')); });
-    input.addEventListener('change', preview);
+  const preview = () => {
+    const custom = ui.strategy.value === 'custom';
+    ui['custom-rules'].hidden = !custom; ui['linear-rules'].hidden = custom;
+    ui['channel-b-rules'].hidden = ui['sync-channels'].checked;
+    ui['strength-delta'].disabled = ui['strength-mode'].value === 'reset';
+    ui['strength-delta-b'].disabled = ui['strength-mode-b'].value === 'reset';
+    ui['preview-caption'].textContent = custom ? '下一次点炮的指令预览' : '换算预览 / 失分 8,000 点';
+    bridge.configureStopKey(ui['stop-key'].value);
+    try {
+      const result = penaltyFor(8000, config());
+      ui['rule-preview'].textContent = custom ? describePlan(result) : `临时强度 ${result.intensity} · ${(result.durationMs / 1000).toLocaleString()} 秒`;
+    } catch (error) { ui['rule-preview'].textContent = error.message; }
+  };
+  for (const input of [ui.device, ui.channel, ui.rate, ui.maximum, ui.duration, ui.simulation, ui.strategy, ui['sync-channels'],
+    ui['strength-mode'], ui['strength-mode-b'], ui['strength-delta'], ui['strength-delta-b'], ui['custom-seconds'], ui['custom-seconds-b'], ui.waveform, ui['waveform-b'], ui['stop-key']]) {
+    const change = () => { preview(); if (engine.enabled) engine.stop().then(() => log('设置已改变，请重新启用')).catch(() => log('请在 App 手动停止')); };
+    input.addEventListener('input', change); input.addEventListener('change', change);
   }
   ui.arm.addEventListener('click', async () => {
     ui.arm.disabled = true;
@@ -132,7 +159,7 @@ function mount() {
       await engine.stop();
       if (!bridge.connected) throw new Error('请先从本页打开雀魂并等待脚本连接');
       const device = devices.find(item => JSON.stringify([item.clientId, item.slotId]) === ui.device.value);
-      controller.selection = device ? { ...device, channel: Number(ui.channel.value) } : null;
+      controller.selection = device ? { ...device, channel: ui.channel.value === 'both' ? 'both' : Number(ui.channel.value) } : null;
       engine.arm(config()); log(ui.simulation.checked ? '模拟已启用' : '真实输出已启用；重连或异常后需重新启用');
     } catch (error) { log(error.message); }
     finally { ui.arm.disabled = false; }
@@ -148,7 +175,7 @@ function mount() {
     badge('relay', '中继未连接'); ui['relay-message'].textContent = '连接已断开。';
   });
   ui.copy.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(JSON.stringify({ version: '0.4.0', total, events: recent }, null, 2)); ui.copy.textContent = '已复制'; }
+    try { await navigator.clipboard.writeText(JSON.stringify({ version: '0.5.0', total, events: recent }, null, 2)); ui.copy.textContent = '已复制'; }
     catch { ui.copy.textContent = '复制失败，请允许剪贴板访问'; }
   });
   ui.clear.addEventListener('click', () => { recent.length = 0; renderEvents(); });

@@ -7,7 +7,8 @@ import { parseHTML } from 'linkedom';
 
 test('dashboard mounts defaults and cannot arm without the game bridge', async () => {
   const { document, window: domWindow } = parseHTML('<html><body></body></html>');
-  const scope = { crypto: webcrypto, addEventListener() {}, removeEventListener() {}, open: () => null };
+  const listeners = {};
+  const scope = { crypto: webcrypto, addEventListener(type, listener) { listeners[type] = listener; }, removeEventListener() {}, open: () => null };
   const Option = function (text, value) {
     const element = document.createElement('option'); element.textContent = text; element.value = value; return element;
   };
@@ -17,7 +18,10 @@ test('dashboard mounts defaults and cannot arm without the game bridge', async (
   vm.runInContext(compiled.outputFiles[0].text, context);
   assert.equal(document.querySelector('h1').textContent, 'DGLab-Majsoul 控制台');
   assert.equal(document.querySelector('input[type=checkbox]').checked, true);
-  assert.deepEqual([...document.querySelectorAll('input[type=number]')].map(e => e.value), ['0', '0', '5000']);
+  assert.equal(document.querySelector('#strategy').value, 'custom');
+  assert.equal(document.querySelector('#maximum').value, '0');
+  assert.equal(document.querySelector('#strength-delta').value, '0');
+  assert.equal(document.querySelector('#custom-seconds').value, '5');
   assert.equal(document.querySelector('a').getAttribute('href'), '/userscripts/dglab-majsoul.user.js');
   const arm = [...document.querySelectorAll('button')].find(e => e.textContent === '应用设置并启用');
   arm.dispatchEvent(new domWindow.Event('click'));
@@ -26,6 +30,7 @@ test('dashboard mounts defaults and cannot arm without the game bridge', async (
   assert.equal(document.querySelector('img').hidden, true);
   assert.equal(document.querySelector('#relay-address').value, 'wss://dglab-majsoul.pages.dev');
   assert.equal(document.querySelectorAll('.card').length, 4);
+  for (const option of document.querySelector('#strategy').querySelectorAll('option')) option.selected = option.value === 'linear';
   document.querySelector('#rate').value = '2';
   document.querySelector('#maximum').value = '30';
   document.querySelector('#rate').dispatchEvent(new domWindow.Event('input'));
@@ -40,4 +45,21 @@ test('dashboard mounts defaults and cannot arm without the game bridge', async (
   assert.equal(document.querySelector('#pair-link').value, '');
   assert.equal(document.querySelector('#pairing').hidden, true);
   assert.equal(document.querySelector('#show-pairing').hidden, true);
+  const instance = 'a'.repeat(32);
+  const gameWindow = { closed: false, postMessage(message) {
+    if (message.kind !== 'hello') return;
+    listeners.message({ source: gameWindow, origin: 'https://game.maj-soul.com', data: {
+      channel: 'dglab-majsoul-v1', kind: 'ack', session: message.session, instance,
+    } });
+    listeners.message({ source: gameWindow, origin: 'https://game.maj-soul.com', data: {
+      channel: 'dglab-majsoul-v1', kind: 'event', session: message.session, instance, sequence: 1,
+      event: { type: 'script-ready', connection: 0, version: '0.5.0', time: new Date().toISOString() },
+    } });
+  } };
+  scope.open = () => gameWindow;
+  document.querySelector('#open-game').dispatchEvent(new domWindow.Event('click'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(document.querySelector('#event-count').textContent, '1');
+  assert.match(document.querySelector('#event-list').textContent, /脚本就绪.*0.5.0/);
+
 });

@@ -1,4 +1,7 @@
+import { customPlan, describePlan } from './rules.mjs';
+
 export function penaltyFor(loss, config) {
+  if (config.strategy === 'custom') return customPlan(config);
   const { per1000, maxIntensity, durationMs } = config;
   if (!Number.isSafeInteger(loss) || loss <= 0 ||
       !Number.isFinite(per1000) || per1000 <= 0 ||
@@ -18,7 +21,7 @@ export class PenaltyEngine {
   arm(config) {
     penaltyFor(1000, config);
     if (!config.simulation && !this.transport.ready()) throw new Error('请先配对并选择设备通道');
-    this.config = { ...config };
+    this.config = JSON.parse(JSON.stringify(config));
     this.enabled = true;
   }
   async stop() {
@@ -41,13 +44,13 @@ export class PenaltyEngine {
     if (this.seen.size > 512) this.seen.delete(this.seen.values().next().value);
     if (this.busy) { this.log('已有任务，跳过本次惩罚（不排队）'); return; }
     const command = penaltyFor(event.loss, this.config);
-    if (this.config.simulation) { this.log(`模拟：点炮失分 ${event.loss}，临时强度 ${command.intensity}，${command.durationMs}ms`); return; }
+    if (this.config.simulation) { this.log(command.strategy === 'custom' ? `模拟：点炮失分 ${event.loss}；${describePlan(command)}` : `模拟：点炮失分 ${event.loss}，临时强度 ${command.intensity}，${command.durationMs}ms`); return; }
     if (!this.transport.ready()) { this.enabled = false; this.log('设备不可用，已暂停'); return; }
     this.busy = true;
     try {
-      this.log(`请求：点炮失分 ${event.loss}，临时强度上限 ${command.intensity}，${command.durationMs}ms`);
+      this.log(command.strategy === 'custom' ? `请求：点炮失分 ${event.loss}；${describePlan(command)}` : `请求：点炮失分 ${event.loss}，临时强度上限 ${command.intensity}，${command.durationMs}ms`);
       const result = await this.transport.fire(command);
-      this.log(result?.skipped ? 'App 通道上限为零，未下发任务' :
+      this.log(result?.details ? `任务已返回成功；${result.details.map(item => `${item.channel} 通道下发变化 ${item.delta >= 0 ? '+' : ''}${item.delta}`).join('；')}` : result?.skipped ? 'App 通道上限为零或无有效变化，未下发任务' :
         `任务已返回成功；下发临时强度 ${result?.intensity ?? command.intensity}，${command.durationMs}ms`);
     } catch {
       this.enabled = false;

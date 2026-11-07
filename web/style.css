@@ -98,3 +98,10 @@ footer { display: flex; justify-content: space-between; padding: 25px 0; margin-
 @media (max-width: 900px) { .console { padding: 0 22px; } .workspace { grid-template-columns: minmax(0, 1fr); } .activity-card { min-height: auto; } .hero { align-items: start; } .hero .button { max-width: 200px; line-height: 1.7; } }
 @media (max-width: 560px) { .console { padding: 0 16px; } .topbar { height: 68px; } .top-note { display: none; } .hero { flex-direction: column; padding: 30px 0 24px; gap: 20px; } .hero .button { max-width: none; width: 100%; } .card { padding: 20px 16px; } .status-strip { gap: 15px; padding: 14px; } .event-counter { margin-left: 0; } .three-columns { grid-template-columns: 1fr; } .two-columns { gap: 12px; } .game-launch { flex-direction: column; align-items: stretch; } .game-launch .field { flex: auto; } .control-actions, .button-row { flex-direction: column; } .pairing { grid-template-columns: 1fr; } .pairing img { margin: auto; } footer { gap: 14px; line-height: 1.7; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.rule-channel { border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin: 16px 0 0; min-width: 0; }
+.rule-channel legend { color: #a7bcca; font-size: 11px; padding: 0 8px; }
+.sync-label { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 12px; color: #abc0ce; }
+.sync-label input { accent-color: var(--accent); }
+.rule-common, #linear-rules { margin-top: 18px; }
+.activity-health { padding: 10px 12px; border: 1px solid #33534f; border-radius: 7px; background: #73ddc508; color: #9bc8bd; font-size: 11px; margin: 0 0 20px; }

@@ -1,4 +1,5 @@
 import { DglabSocket, COYOTE_WAVEFORMS, COYOTE_WAVEFORM } from 'dglab-kit';
+import { customPlan } from './rules.mjs';
 
 export class DglabController {
   selection = null;
@@ -44,32 +45,66 @@ export class DglabController {
     const device = target && this.sdk?.getClient(target.clientId)?.getDevice(target.slotId);
     return !!device && device.type === 'COYOTE_030' && device.slotState?.hasDevice === true;
   }
-  async fire({ intensity, durationMs }) {
+  async fire(command) {
+    if (command.strategy === 'custom') return this.fireCustom(command);
+    let { intensity, durationMs } = command;
     if (!this.ready() || ![0, 1].includes(this.selection.channel)) throw new Error('device-unavailable');
     const target = this.active = { ...this.selection };
     const { clientId, slotId, channel } = target;
-    const state = this.sdk.getClient(clientId).getDevice(slotId).slotState;
+    const device = this.sdk.getClient(clientId).getDevice(slotId);
+    const state = device.slotState;
+    const base = device.props?.[channel === 0 ? 'intensityA' : 'intensityB'];
     const appMax = state[channel === 0 ? 'channelA' : 'channelB']?.intensityMax;
-    if (!Number.isFinite(appMax) || appMax < 0 || !Number.isFinite(intensity) || intensity < 0 ||
+    if (!Number.isInteger(base) || base < 0 || base > 200 || !Number.isFinite(appMax) || appMax < 0 || !Number.isFinite(intensity) || intensity < 0 ||
         !Number.isInteger(durationMs) || durationMs < 100 || durationMs > 10000) throw new Error('missing-device-limits');
     intensity = Math.floor(Math.min(intensity, appMax, 200));
     if (intensity <= 0) { this.active = null; return { intensity: 0, durationMs, skipped: true }; }
     // App owns the duration: temporary intensity resets to zero on task completion.
     await Promise.all([
-      this.sdk.setTempIntensity(clientId, slotId, channel, intensity, durationMs, { timeout: durationMs + 5000, immediate: true }),
+      this.sdk.setTempIntensity(clientId, slotId, channel, intensity - base, durationMs, { timeout: durationMs + 5000, immediate: true }),
       this.sdk.sendPulse(clientId, slotId, channel, durationMs, COYOTE_WAVEFORMS[COYOTE_WAVEFORM.BUBBLE].raw, { timeout: durationMs + 5000, immediate: true }),
     ]);
     return { intensity, durationMs };
+  }
+  async fireCustom(plan) {
+    if (!this.ready()) throw new Error('device-unavailable');
+    const channelNames = this.selection.channel === 'both' ? ['A', 'B'] : this.selection.channel === 0 ? ['A'] : this.selection.channel === 1 ? ['B'] : [];
+    if (!channelNames.length || Object.keys(plan.channels || {}).sort().join() !== channelNames.sort().join()) throw new Error('channel-mismatch');
+    plan = customPlan({ ...plan, targetChannel: channelNames.length === 2 ? 'both' : channelNames[0], syncChannels: false });
+    const { clientId, slotId } = this.selection;
+    const device = this.sdk.getClient(clientId).getDevice(slotId);
+    const prepared = channelNames.map(name => {
+      const rule = plan.channels[name], channel = name === 'A' ? 0 : 1;
+      const base = device.props?.[`intensity${name}`];
+      const appMax = device.slotState?.[`channel${name}`]?.intensityMax;
+      if (!Number.isInteger(base) || base < 0 || base > 200 || !Number.isFinite(appMax) || appMax < 0) throw new Error(`缺少 ${name} 通道强度或上限反馈`);
+      const target = rule.mode === 'reset' ? 0 : Math.max(0, Math.min(base + rule.delta, plan.maxIntensity, appMax, 200));
+      return { ...rule, name, channel, delta: Math.floor(target) - base };
+    });
+    this.active = { clientId, slotId, channels: prepared.map(rule => rule.channel) };
+    const tasks = [];
+    for (const rule of prepared) {
+      const options = { immediate: true, timeout: rule.durationMs + 5000 };
+      if (rule.delta !== 0) tasks.push(rule.mode === 'permanent' ?
+        this.sdk.addIntensity(clientId, slotId, rule.channel, rule.delta, options) :
+        this.sdk.setTempIntensity(clientId, slotId, rule.channel, rule.delta, rule.durationMs, options));
+      if (rule.waveform && rule.durationMs > 0) tasks.push(this.sdk.sendPulse(clientId, slotId, rule.channel, rule.durationMs, COYOTE_WAVEFORMS[rule.waveform].raw, options));
+    }
+    if (!tasks.length) { this.active = null; return { skipped: true }; }
+    await Promise.all(tasks);
+    return { details: prepared.map(rule => ({ channel: rule.name, delta: rule.delta })) };
   }
   async stop() {
     const target = this.active;
     this.active = null;
     if (!target || !this.sdk) return;
-    const { clientId, slotId, channel } = target;
-    const results = await Promise.allSettled([
+    const { clientId, slotId } = target;
+    const channels = target.channels || [target.channel];
+    if (channels.some(channel => ![0, 1].includes(channel))) throw new Error('invalid-stop-channel');
+    const results = await Promise.allSettled(channels.flatMap(channel => [
       this.sdk.clearOperate(clientId, { slotId, channel }),
       this.sdk.resetIntensity(clientId, slotId, channel),
-    ]);
+    ]));
     if (results.some(result => result.status === 'rejected')) throw new Error('停止未确认，请在 App 手动停止');
   }
   async disconnect() {
